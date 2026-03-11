@@ -28,7 +28,7 @@ export async function GET(): Promise<NextResponse> {
     entries = (await fs.readdir(env.transcriptSaveDir, { withFileTypes: true })) as Dirent[];
   } catch {
     return NextResponse.json(
-      { error: "Could not read transcripts folder." },
+      { error: "Saved transcripts are temporarily unavailable. Please try again later." },
       { status: 500 }
     );
   }

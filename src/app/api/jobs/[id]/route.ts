@@ -35,12 +35,15 @@ export async function GET(_: Request, { params }: Params): Promise<NextResponse>
   }
 
   if (state === "failed") {
+    const raw = job.failedReason ?? "";
+    const userMessage =
+      /REDIS|ENOENT|not found|required\.|ECONNREFUSED|timeout/i.test(raw)
+        ? "Transcription failed. Please try again with another file."
+        : raw && raw.length < 120
+          ? raw
+          : "Transcription failed. Please try again with another file.";
     return NextResponse.json(
-      {
-        state,
-        progress,
-        error: job.failedReason ?? "Transcription failed.",
-      },
+      { state, progress, error: userMessage },
       { status: 500 }
     );
   }

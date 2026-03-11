@@ -14,6 +14,7 @@ export const maxDuration = 300;
 
 const ALLOWED_EXTENSIONS = [
   ".m4a",
+  ".m4v",
   ".mp3",
   ".wav",
   ".aac",
@@ -122,8 +123,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
 
     return NextResponse.json({ jobId: job.id });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Upload failed.";
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch {
+    return NextResponse.json(
+      { error: "Something went wrong. Please try again in a moment." },
+      { status: 500 }
+    );
   }
 }

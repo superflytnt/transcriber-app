@@ -12,7 +12,7 @@ type SavedTranscript = {
 };
 
 const ACCEPT_AUDIO =
-  ".m4a,.mp3,.wav,.aac,.webm,.qta,.flac,.ogg,.mp4,.mpeg,.mpga,.mov";
+  ".m4a,.m4v,.mp3,.wav,.aac,.webm,.qta,.flac,.ogg,.mp4,.mpeg,.mpga,.mov";
 
 type JobState = "waiting" | "active" | "completed" | "failed" | "delayed" | "paused";
 
@@ -67,10 +67,40 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(a.href);
 }
 
+/** Show only user-friendly messages; hide technical/server details. */
+function toUserMessage(serverError: string | undefined): string {
+  if (!serverError?.trim()) return "Something went wrong. Please try again.";
+  const s = serverError.trim();
+  if (/REDIS|ENOENT|ECONNREFUSED|required\.|Invalid response|job ID returned/i.test(s))
+    return "Something went wrong. Please try again.";
+  if (/timeout|timed out|504/i.test(s))
+    return "The request took too long. Please try again.";
+  if (s.length > 120 || /^\w+Error:|at \s+\S+\.\w+\(/i.test(s))
+    return "Something went wrong. Please try again.";
+  return s;
+}
+
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [languageHint, setLanguageHint] = useState("");
+  const LANGUAGE_OPTIONS: { value: string; label: string }[] = [
+    { value: "", label: "Auto-detect" },
+    { value: "en", label: "English" },
+    { value: "es", label: "Spanish" },
+    { value: "fr", label: "French" },
+    { value: "de", label: "German" },
+    { value: "it", label: "Italian" },
+    { value: "pt", label: "Portuguese" },
+    { value: "nl", label: "Dutch" },
+    { value: "pl", label: "Polish" },
+    { value: "ru", label: "Russian" },
+    { value: "ja", label: "Japanese" },
+    { value: "zh", label: "Chinese" },
+    { value: "ko", label: "Korean" },
+    { value: "ar", label: "Arabic" },
+    { value: "hi", label: "Hindi" },
+  ];
   const [knownSpeakers, setKnownSpeakers] = useState("");
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobState, setJobState] = useState<JobState | null>(null);
@@ -178,7 +208,7 @@ export default function Home() {
         setJobState(data.state);
         setJobProgress(data.progress ?? null);
         if (stored.fileName) setJobFileName(stored.fileName);
-        if (data.state === "failed") setError(data.error ?? "Transcription failed.");
+        if (data.state === "failed") setError(toUserMessage(data.error ?? "Transcription failed."));
         if (data.state === "completed" && data.result) {
           setText(data.result.text);
           setOriginalSpeakerText(data.result.speakerText);
@@ -229,22 +259,21 @@ export default function Home() {
         let data: { jobId?: string; error?: string };
         try {
           if (!contentType.includes("application/json")) {
-            const preview = raw.slice(0, 150);
-            setError(`Invalid response from server (${response.status}). Try again.${preview ? ` Response: ${preview}…` : ""}`);
+            setError("Something went wrong. Please try again.");
             return;
           }
           data = JSON.parse(raw) as { jobId?: string; error?: string };
         } catch {
-          setError("Invalid response from server. Try again.");
+          setError("Something went wrong. Please try again.");
           return;
         }
 
         if (!response.ok) {
-          setError(data.error ?? "Upload failed.");
+          setError(toUserMessage(data.error ?? "Upload failed."));
           return;
         }
         if (!data.jobId) {
-          setError("No job ID returned. Try again.");
+          setError("Something went wrong. Please try again.");
           return;
         }
         const id = data.jobId as string;
@@ -258,12 +287,12 @@ export default function Home() {
           // ignore
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Upload failed. Check the network and try again.";
+        const msg = err instanceof Error ? err.message : "";
         const isTimeout = /timeout|timed out|504/i.test(msg);
         setError(
           isTimeout
-            ? "Upload timed out. Large files (e.g. 30MB+) can take several minutes. Try again; the server now allows longer uploads."
-            : msg
+            ? "Upload took too long. Large files can take several minutes. Please try again."
+            : "Something went wrong. Please check your connection and try again."
         );
       } finally {
         setIsUploading(false);
@@ -281,18 +310,18 @@ export default function Home() {
         try {
           data = (await res.json()) as JobResponse;
         } catch {
-          setError("Could not check job status. Try refreshing.");
+          setError("We couldn't check the status. Please refresh and try again.");
           setJobState("failed");
           return;
         }
         if (!res.ok) {
-          setError((data as { error?: string }).error ?? "Request failed.");
+          setError(toUserMessage((data as { error?: string }).error ?? "Something went wrong. Please try again."));
           setJobState("failed");
           return;
         }
         setJobState(data.state);
         setJobProgress(data.progress ?? null);
-        if (data.state === "failed") setError(data.error ?? "Transcription failed.");
+        if (data.state === "failed") setError(toUserMessage(data.error ?? "Transcription failed."));
         if (data.state === "completed" && data.result) {
           setText(data.result.text);
           setOriginalSpeakerText(data.result.speakerText);
@@ -454,7 +483,7 @@ export default function Home() {
                   {isDragOver ? "Drop to start" : "Drop your audio here"}
                 </p>
                 <p className="text-sm text-zinc-500">or click to choose a file · starts automatically</p>
-                <p className="text-xs text-zinc-600 mt-1">Supported: m4a, mp3, wav, aac, webm, qta, flac, ogg, mp4, mpeg, mpga, mov</p>
+                <p className="text-xs text-zinc-600 mt-1">Supported: m4a, m4v, mp3, wav, aac, webm, qta, flac, ogg, mp4, mpeg, mpga, mov</p>
               </>
             )}
           </div>
@@ -466,16 +495,23 @@ export default function Home() {
             Optional: language & speaker names
           </summary>
           <div className="space-y-3 border-t border-zinc-800 px-4 py-3">
-            <input
+            <label className="block text-xs font-medium text-zinc-500 mb-1">Language</label>
+            <select
               value={languageHint}
               onChange={(e) => setLanguageHint(e.target.value)}
-              placeholder="Language hint (e.g. en)"
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500"
-            />
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+            >
+              {LANGUAGE_OPTIONS.map((opt) => (
+                <option key={opt.value || "auto"} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <label className="block text-xs font-medium text-zinc-500 mb-1">Known speakers (comma-separated)</label>
             <input
               value={knownSpeakers}
               onChange={(e) => setKnownSpeakers(e.target.value)}
-              placeholder="Known speakers, comma-separated (e.g. Seth, Guest)"
+              placeholder="e.g. Seth, Guest"
               className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500"
             />
           </div>
@@ -486,9 +522,11 @@ export default function Home() {
           <div className="mb-6 rounded-xl border-2 border-red-500 bg-red-950/60 px-5 py-4 shadow-lg ring-2 ring-red-500/20">
             <p className="font-semibold text-red-100">Error</p>
             <p className="mt-1 text-red-200">{error}</p>
-            <p className="mt-2 text-sm text-red-300/90">
-              Supported: m4a, mp3, wav, aac, webm, qta, flac, ogg, mp4, mpeg, mpga, mov. Try again with one of these.
-            </p>
+            {/format|unsupported|supported:|m4a|mp3|wav|aac|webm|flac|ogg|mp4|mpeg|mov/i.test(error) && (
+              <p className="mt-2 text-sm text-red-300/90">
+                Supported: m4a, m4v, mp3, wav, aac, webm, qta, flac, ogg, mp4, mpeg, mpga, mov. Try again with one of these.
+              </p>
+            )}
           </div>
         )}
 
