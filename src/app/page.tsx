@@ -344,13 +344,10 @@ export default function Home() {
             Transcriber
           </h1>
           <p className="mt-2 text-zinc-400">
-            Drop audio. We transcribe with speaker ID and give you copy-ready text.
+            Drop audio. We&apos;ll transcribe it.
           </p>
           <p className="mt-1 text-xs text-zinc-500">
             Fast · Accurate · Saved to folder with stats
-          </p>
-          <p className="mt-2 text-xs text-zinc-500">
-            Transcription runs in the background — you can refresh or leave and come back; status will still show.
           </p>
         </header>
 
@@ -397,6 +394,9 @@ export default function Home() {
               <div className="flex flex-col items-center gap-4">
                 <span className="inline-block h-10 w-10 animate-spin rounded-full border-2 border-zinc-500 border-t-emerald-400" />
                 <p className="text-lg font-medium text-zinc-200">{statusLabel}</p>
+                <p className="text-xs text-zinc-500 text-center max-w-xs">
+                  Transcription runs in the background — wait or come back later; status will still show.
+                </p>
                 <div className="h-1.5 w-48 overflow-hidden rounded-full bg-zinc-700">
                   <div className="h-full w-full animate-shimmer rounded-full bg-gradient-to-r from-transparent via-emerald-400/60 to-transparent bg-[length:200%_100%]" />
                 </div>
