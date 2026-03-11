@@ -5,7 +5,7 @@ Double-checked so tomorrow you can open the site, drop a file, and have it work.
 ## Required on Railway
 
 1. **Environment variables**
-   - `REDIS_URL` – Redis connection string (required; queue + worker use it).
+   - `REDIS_URL` – Redis connection string (optional; when set, queue + worker run; when unset, only web runs and transcription uses inline jobs).
    - `OPENAI_API_KEY` – Required for transcription.
    - Optional: `UPLOAD_DIR` (default `/tmp/transcriber-uploads`), `CHUNK_TARGET_MB` (20), `MAX_UPLOAD_MB` (200).
 
@@ -43,6 +43,7 @@ Double-checked so tomorrow you can open the site, drop a file, and have it work.
 - **API:** Empty files (0 bytes) and files with no name are rejected with clear messages.
 - **API:** Audio-type fallback only used when the file has a non-empty (trimmed) name.
 - **Worker:** If the uploaded file is missing (e.g. different replica), the job fails with a clear message suggesting 1 replica.
+- **Deploy crash:** If `REDIS_URL` is not set, the start script now runs only the web process (inline transcription). Set `REDIS_URL` so the worker runs, or leave unset and the app stays up.
 
 ## Quick test
 

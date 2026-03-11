@@ -1,0 +1,19 @@
+---
+description: Mandatory checklist before claiming done or that something works; prevents unverified claims and wrong port.
+alwaysApply: true
+---
+
+# Mandatory before you say "done" or "it works"
+
+You **must** satisfy all of the following before presenting any fix or feature to the user as working or done. No exceptions.
+
+1. **One URL only**
+   - App URL is **http://localhost:3000**. You never use 3001 or any other port. If 3000 is in use, free it and use 3000. (See `env-and-deploy.mdc`.)
+
+2. **Verified the same way the user will**
+   - You have exercised the **same path** the user will (e.g. open app in browser at http://localhost:3000, sign in if needed, do the action—e.g. upload a file—see the result in the UI). Curl, "process didn't crash," or code logic alone do **not** count. (See `verify-same-as-user.mdc`.)
+
+3. **Proof**
+   - You have seen the relevant screen yourself (browser snapshot/screenshot). You do not claim done without having run the app and the flow and captured that.
+
+If you have not done 1–3, do **not** say it works, it's done, or "I tested it." Do the work first, then report.

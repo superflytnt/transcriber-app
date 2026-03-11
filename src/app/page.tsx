@@ -7,9 +7,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 const DEBUG_LOG = (message: string, data: Record<string, unknown>, hypothesisId?: string) => {
   fetch("http://127.0.0.1:7421/ingest/81861ae4-fa98-451e-aec2-a0d964acdcf8", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "32fb25" },
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "856ac8" },
     body: JSON.stringify({
-      sessionId: "32fb25",
+      sessionId: "856ac8",
       location: "page.tsx",
       message,
       data,
@@ -910,8 +910,8 @@ export default function Home() {
           </div>
         </details>
 
-        {/* Error - impossible to miss */}
-        {error && (
+        {/* Error - impossible to miss (only when not showing the failed-job strip below) */}
+        {error && !(jobId && jobState === "failed") && (
           <div className="mb-6 rounded-xl border-2 border-red-500 bg-red-950/60 px-5 py-4 shadow-lg ring-2 ring-red-500/20">
             <p className="font-semibold text-red-100">Error</p>
             <p className="mt-1 text-red-200">{error}</p>
@@ -923,17 +923,17 @@ export default function Home() {
           </div>
         )}
 
-        {/* Done state strip */}
+        {/* Done / Failed state strip (single place for job outcome) */}
         {jobId && (jobState === "completed" || jobState === "failed") && (
           <div
-            className={`mb-6 flex items-center gap-3 rounded-xl border px-4 py-3 ${
+            className={`mb-6 rounded-xl border px-4 py-3 ${
               jobState === "failed"
                 ? "border-red-800 bg-red-950/30 text-red-200"
                 : "border-emerald-800/60 bg-emerald-950/20 text-emerald-200"
             }`}
           >
             {jobState === "completed" ? (
-              <>
+              <div className="flex items-center gap-3">
                 <svg className="h-5 w-5 shrink-0 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
@@ -943,14 +943,17 @@ export default function Home() {
                     · Processed in {(timings.endToEndMs / 1000).toFixed(1)}s
                   </span>
                 )}
-              </>
+              </div>
             ) : (
-              <>
-                <svg className="h-5 w-5 shrink-0 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-                <span className="font-medium">Failed</span>
-              </>
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-3">
+                  <svg className="h-5 w-5 shrink-0 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  <span className="font-medium">Failed</span>
+                </div>
+                {error && <p className="text-sm text-red-300/90">{error}</p>}
+              </div>
             )}
           </div>
         )}

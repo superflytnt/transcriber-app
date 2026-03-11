@@ -16,25 +16,28 @@ if (mode === "noop") {
   const worker = run("npm", ["run", "worker"]);
   worker.on("exit", (code) => process.exit(code ?? 1));
 } else {
-  // Run web + worker together so uploaded files and worker share filesystem.
+  // Run web; run worker only when REDIS_URL is set (otherwise API uses inline jobs).
   const web = run("npm", ["run", "start:web"]);
-  const worker = run("npm", ["run", "worker"]);
+  const hasRedis = Boolean(process.env.REDIS_URL?.trim());
+  const worker = hasRedis ? run("npm", ["run", "worker"]) : null;
 
   const shutdown = () => {
     web.kill("SIGTERM");
-    worker.kill("SIGTERM");
+    if (worker) worker.kill("SIGTERM");
   };
 
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
   web.on("exit", (code) => {
-    worker.kill("SIGTERM");
+    if (worker) worker.kill("SIGTERM");
     process.exit(code ?? 1);
   });
 
-  worker.on("exit", (code) => {
-    web.kill("SIGTERM");
-    process.exit(code ?? 1);
-  });
+  if (worker) {
+    worker.on("exit", (code) => {
+      web.kill("SIGTERM");
+      process.exit(code ?? 1);
+    });
+  }
 }

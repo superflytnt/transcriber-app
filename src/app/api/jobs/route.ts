@@ -8,7 +8,7 @@ import { env } from "@/lib/env";
 import { getCurrentUser } from "@/lib/auth";
 import { getUserId, getTranscriptSaveDirForUser } from "@/lib/user-id";
 import { bytesToMb, ensureDirectory, safeUploadPath } from "@/lib/files";
-import { getInlineJob, setInlineJob, updateInlineJobProgress } from "@/lib/inline-jobs";
+import { setInlineJob, setInlineJobState, updateInlineJobProgress } from "@/lib/inline-jobs";
 import { getTranscriptionQueue } from "@/lib/queue";
 import { runTranscriptionJob } from "@/lib/run-transcription";
 
@@ -177,27 +177,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "Request was cancelled." }, { status: 499 });
     }
     const jobId = `inline-${uuidv4()}`;
-    setInlineJob(jobId, { state: "active" });
+    await setInlineJob(jobId, { state: "active" });
     console.log("[POST /api/jobs] no Redis — returning jobId immediately, running transcription in background", { jobId });
     void runTranscriptionJob(jobData, (chunkIndex, totalChunks) => {
-      updateInlineJobProgress(jobId, chunkIndex + 1, totalChunks);
+      void updateInlineJobProgress(jobId, chunkIndex + 1, totalChunks);
     })
-      .then((result) => {
-        const job = getInlineJob(jobId);
-        if (job) {
-          job.state = "completed";
-          job.result = { text: result.text, speakerText: result.speakerText, segments: result.segments, timings: result.timings };
-          job.progress = undefined;
-        }
+      .then(async (result) => {
+        await setInlineJobState(jobId, {
+          state: "completed",
+          result: { text: result.text, speakerText: result.speakerText, segments: result.segments, timings: result.timings },
+        });
         console.log("[POST /api/jobs] inline transcription finished", { jobId });
       })
-      .catch((err) => {
-        const job = getInlineJob(jobId);
-        if (job) {
-          job.state = "failed";
-          job.error = err instanceof Error ? err.message : String(err);
-          job.progress = undefined;
-        }
+      .catch(async (err) => {
+        await setInlineJobState(jobId, {
+          state: "failed",
+          error: err instanceof Error ? err.message : String(err),
+        });
         console.error("[POST /api/jobs] inline transcription failed", jobId, err);
       });
     return NextResponse.json({ jobId });

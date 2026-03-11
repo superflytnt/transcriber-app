@@ -23,7 +23,7 @@ export async function GET(_: Request, { params }: Params): Promise<NextResponse>
   const id = params.id ?? "";
 
   if (id.startsWith("inline-")) {
-    const job = getInlineJob(id);
+    const job = await getInlineJob(id);
     if (!job) {
       return NextResponse.json({ error: "Job not found." }, { status: 404 });
     }

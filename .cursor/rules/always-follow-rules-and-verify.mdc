@@ -14,6 +14,7 @@ alwaysApply: true
 
 ## Verify after implementing
 
+- **Same path as the user:** Verification must be the same way the user will verify (see `verify-same-as-user.mdc`). Curl, "start script didn't crash," or code logic alone do not count. For UI/deploy, use the browser and the full flow.
 - After **every fix** and **every enhancement**, run verification before saying you're done:
   1. **Build:** `npm run build` from `transcriber-app`. Fix any build errors. A clean build is required.
   2. **Run the app:** Start the dev server (`npm run dev`) and load the app (or the changed route). If you see a runtime error (e.g. "Cannot find module './XXX.js'", server error, blank page, or **unstyled/minimal UI**), fix it. Stale `.next` cache often causes chunk or CSS issues: run `rm -rf .next && npm run build` then restart dev.

@@ -18,8 +18,8 @@ Do **not** say a feature is done until you have **verified it** and it **works**
    - Run `npm run test:e2e` (Playwright). If any test fails, fix the cause or update the test, then re-run until they pass.
    - For API/upload-related changes, run `npm run test:api` as well (dev server on port 3000; start it if needed per env-and-deploy rule).
 
-3. **Use the browser**
-   - For user-facing work: start the dev server if needed, then use the browser (navigate to the app, take a snapshot, click through the flow). Actually load the page and verify the UI and the feature. See what the user would see.
+3. **Use the browser at http://localhost:3000**
+   - For user-facing work: start the dev server on port 3000 if needed (one port only—see `env-and-deploy.mdc`), then use the browser at **http://localhost:3000** (navigate, take a snapshot, click through the flow). Actually load the page and verify the UI and the feature. See what the user would see.
    - If the browser shows a problem (stuck on Loading, broken form, wrong state), fix it. Do not say "done" and leave the user with a broken experience.
    - Use all tools at your disposal: browser_navigate, browser_snapshot, browser_click, browser_fill, etc., plus build and e2e. Verification is not optional.
 

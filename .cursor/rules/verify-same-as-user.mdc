@@ -1,0 +1,27 @@
+---
+description: Do not show or claim anything works until verified the same way the user will verify (e.g. through the UI).
+alwaysApply: true
+---
+
+# Verify the same way the user will
+
+## Gate
+
+You are **not allowed** to show or present any fix, feature, or "it works" to the user until you have **verified it the same way the user will verify it** (e.g. through the UI, same flow, same path).
+
+## What does NOT count as verification
+
+- Code reasoning or "it should work because..."
+- Curl or a single API call to one endpoint
+- Start script didn't crash / process stayed up
+- Unit tests or build passed alone
+- Any check that is not the full path the user will take
+
+## What DOES count
+
+- For user-facing work: use the browser (navigate, sign in if needed, perform the action the user will do, e.g. upload a file), see the result in the UI, and capture a snapshot/screenshot. That is verification.
+- For deploy/startup: if the user will verify by opening the deployed app, you must have either verified the same flow locally through the UI after your change, or (when possible) confirmed the deploy and then exercised the app through the UI.
+
+## Summary
+
+Do not say "it will work," "it works," or "I tested it" unless you have actually done the verification the user will do. No exceptions.

@@ -7,8 +7,9 @@ alwaysApply: true
 
 ## When building, testing, or changing the app
 
-1. **Local URL (http://localhost:3000/)**
-   - Before running e2e tests, Playwright, or when the user says the page won't load: check if something is listening on port 3000 (`lsof -ti :3000` or `curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/`). If not, start the dev server: `npm run dev` (from `transcriber-app`). The dev script already kills port 3000 and binds to it.
+1. **One port only: 3000**
+   - The app runs on **port 3000** only. The URL is **http://localhost:3000**. Do not use 3001 or any other port for testing or verification. If port 3000 is in use, kill the process on 3000 (e.g. `lsof -ti :3000 | xargs kill -9` or rely on the dev script's kill-port step), then start the app on 3000. Never switch to a different port "because 3000 was busy."
+   - Before running e2e tests, Playwright, or when the user says the page won't load: check if something is listening on port 3000. If not, start the dev server: `npm run dev` (from `transcriber-app`). The dev script already kills port 3000 and binds to it.
    - Do not tell the user to "start the server" or "refresh"—start it yourself when it's missing.
 
 2. **Stale/corrupted dev build (blank page, 500 on GET /)**
