@@ -11,6 +11,7 @@ import { bytesToMb, ensureDirectory, safeUploadPath } from "@/lib/files";
 import { setInlineJob, setInlineJobState, updateInlineJobProgress } from "@/lib/inline-jobs";
 import { getTranscriptionQueue } from "@/lib/queue";
 import { runTranscriptionJob } from "@/lib/run-transcription";
+import { planChunks } from "@/lib/chunker";
 
 export const runtime = "nodejs";
 
@@ -137,6 +138,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
     const uploadFinishedAt = Date.now();
 
+    let fileInfo: { durationSeconds: number; sizeMb: number; chunkCount: number; durationFormatted: string } | undefined;
+    try {
+      const plan = await planChunks(uploadPath, env.chunkTargetMb);
+      fileInfo = {
+        durationSeconds: plan.durationSeconds,
+        sizeMb: plan.sizeMb,
+        chunkCount: plan.chunkCount,
+        durationFormatted: plan.durationFormatted,
+      };
+      console.log("[POST /api/jobs] file probed", fileInfo);
+    } catch (probeErr) {
+      console.warn("[POST /api/jobs] ffprobe failed, continuing without file info", probeErr);
+    }
+
     const languageHint = String(formData.get("languageHint") ?? "").trim() || undefined;
     const knownSpeakerNamesRaw = String(formData.get("knownSpeakerNames") ?? "").trim();
     const knownSpeakerNames =
@@ -169,7 +184,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         backoff: { type: "exponential", delay: 5000 },
       });
       console.log("[POST /api/jobs] job queued (Redis)", { queueMs: Date.now() - queueStart, jobId: job.id });
-      return NextResponse.json({ jobId: job.id });
+      return NextResponse.json({ jobId: job.id, fileInfo });
     }
 
     if (request.signal.aborted) {
@@ -178,7 +193,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
     const jobId = `inline-${uuidv4()}`;
     await setInlineJob(jobId, { state: "active" });
-    console.log("[POST /api/jobs] no Redis — returning jobId immediately, running transcription in background", { jobId });
+    console.log("[POST /api/jobs] no Redis — returning jobId immediately, running transcription in background", { jobId, fileInfo });
     void runTranscriptionJob(jobData, (chunkIndex, totalChunks) => {
       void updateInlineJobProgress(jobId, chunkIndex + 1, totalChunks);
     })
@@ -196,7 +211,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         });
         console.error("[POST /api/jobs] inline transcription failed", jobId, err);
       });
-    return NextResponse.json({ jobId });
+    return NextResponse.json({ jobId, fileInfo });
   } catch (err) {
     if (uploadPath) {
       await fsPromises.unlink(uploadPath).catch(() => undefined);

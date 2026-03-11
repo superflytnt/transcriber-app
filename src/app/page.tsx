@@ -2,23 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { formatDurationMs } from "@/lib/format-duration";
 
-// #region agent log
-const DEBUG_LOG = (message: string, data: Record<string, unknown>, hypothesisId?: string) => {
-  fetch("http://127.0.0.1:7421/ingest/81861ae4-fa98-451e-aec2-a0d964acdcf8", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "856ac8" },
-    body: JSON.stringify({
-      sessionId: "856ac8",
-      location: "page.tsx",
-      message,
-      data,
-      hypothesisId,
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-};
-// #endregion
 
 type Session = { email: string; isAdmin?: boolean } | null;
 type SessionState = Session | "loading";
@@ -26,10 +11,12 @@ type SessionState = Session | "loading";
 type SavedTranscript = {
   id: string;
   originalFileName: string;
+  endToEndMs: number;
   endToEndSec: number;
   bottleneck?: string;
   createdAt: string;
   downloadUrl: string;
+  speakers?: string[];
 };
 
 const ACCEPT_AUDIO =
@@ -50,6 +37,13 @@ type JobTimings = {
 };
 
 type JobProgress = { chunk?: number; total?: number };
+
+type FileInfo = {
+  durationSeconds: number;
+  sizeMb: number;
+  chunkCount: number;
+  durationFormatted: string;
+};
 
 type JobResponse = {
   state: JobState;
@@ -92,6 +86,23 @@ function downloadBlob(blob: Blob, filename: string) {
 function parseBySpeakerFromSavedTxt(content: string): string {
   const parts = content.split("\n\n--- By speaker ---\n\n");
   return (parts[1] ?? "").trim();
+}
+
+/** Parse plain transcript section from saved full .txt. */
+function parsePlainFromSavedTxt(content: string): string {
+  const afterStats = content.split("--- Plain transcript ---\n\n")[1] ?? "";
+  return (afterStats.split("\n\n--- By speaker ---\n\n")[0] ?? "").trim();
+}
+
+/** Strip speaker labels ("A: text" → "text") to get plain text from speaker text. */
+function stripSpeakerLabels(speakerText: string): string {
+  return speakerText
+    .split(/\r?\n/)
+    .map((line) => {
+      const i = line.indexOf(": ");
+      return i > 0 ? line.slice(i + 2) : line;
+    })
+    .join("\n");
 }
 
 function safeDownloadBasename(fileName: string): string {
@@ -343,15 +354,18 @@ export default function Home() {
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [uploadTick, setUploadTick] = useState(0);
   const [jobProgress, setJobProgress] = useState<JobProgress | null>(null);
+  const [fileInfo, setFileInfo] = useState<FileInfo | null>(null);
   const [jobFileName, setJobFileName] = useState<string | null>(null);
   const [savedTranscripts, setSavedTranscripts] = useState<SavedTranscript[]>([]);
   const [transcriptsLoadError, setTranscriptsLoadError] = useState<string | null>(null);
+  const [transcriptsLoading, setTranscriptsLoading] = useState(false);
   const [copiedWhich, setCopiedWhich] = useState<"transcript" | "speaker" | null>(null);
   const [originalSpeakerText, setOriginalSpeakerText] = useState("");
   const [speakerRenames, setSpeakerRenames] = useState<Record<string, string>>({});
   const [savedDownloadOpenId, setSavedDownloadOpenId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadStartedAtRef = useRef<number>(0);
+  const pollFailuresRef = useRef<number>(0);
 
   function applySpeakerRenames(baseText: string, renames: Record<string, string>): string {
     return baseText
@@ -376,13 +390,66 @@ export default function Home() {
     return Array.from(set).sort();
   }, [originalSpeakerText]);
 
+  const [viewingTranscriptName, setViewingTranscriptName] = useState<string | null>(null);
+  const [viewingTranscriptId, setViewingTranscriptId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fetchSavedTranscripts = useCallback(async () => {
+    if (!session || typeof session === "string") return;
+    setTranscriptsLoadError(null);
+    setTranscriptsLoading(true);
+    try {
+      const res = await fetch("/api/transcripts", { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setSavedTranscripts(data.transcripts ?? []);
+      } else {
+        const msg = (await res.json().catch(() => ({})))?.error ?? "Could not load saved transcripts.";
+        setTranscriptsLoadError(msg);
+        setSavedTranscripts([]);
+      }
+    } catch {
+      setTranscriptsLoadError("Could not load saved transcripts. Check your connection.");
+      setSavedTranscripts([]);
+    } finally {
+      setTranscriptsLoading(false);
+    }
+  }, [session]);
+
+  const saveTranscriptToDisk = useCallback(async (id: string, newSpeakerText: string) => {
+    setSaving(true);
+    try {
+      await fetch(`/api/transcripts/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ speakerText: newSpeakerText }),
+      });
+      fetchSavedTranscripts();
+    } catch {
+      // silent
+    } finally {
+      setSaving(false);
+    }
+  }, [fetchSavedTranscripts]);
+
   const handleSpeakerRename = useCallback(
     (label: string, newName: string) => {
       const next = { ...speakerRenames, [label]: newName };
       setSpeakerRenames(next);
-      setSpeakerText(applySpeakerRenames(originalSpeakerText, next));
+      const updated = applySpeakerRenames(originalSpeakerText, next);
+      setSpeakerText(updated);
+
+      if (viewingTranscriptId) {
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        const id = viewingTranscriptId;
+        saveTimerRef.current = setTimeout(() => {
+          void saveTranscriptToDisk(id, updated);
+        }, 800);
+      }
     },
-    [originalSpeakerText, speakerRenames]
+    [originalSpeakerText, speakerRenames, viewingTranscriptId, saveTranscriptToDisk]
   );
 
   useEffect(() => {
@@ -415,31 +482,54 @@ export default function Home() {
     return () => clearTimeout(t);
   }, [copiedWhich]);
 
-  const fetchSavedTranscripts = useCallback(async () => {
-    if (!session || typeof session === "string") return;
-    setTranscriptsLoadError(null);
+  useEffect(() => {
+    if (!savedDownloadOpenId) return;
+    const onClick = () => setSavedDownloadOpenId(null);
+    document.addEventListener("click", onClick);
+    return () => document.removeEventListener("click", onClick);
+  }, [savedDownloadOpenId]);
+
+  const loadSavedTranscript = useCallback(async (t: SavedTranscript) => {
     try {
-      const res = await fetch("/api/transcripts", { credentials: "include" });
-      if (res.ok) {
-        const data = await res.json();
-        setSavedTranscripts(data.transcripts ?? []);
-      } else {
-        const msg = (await res.json().catch(() => ({})))?.error ?? "Could not load saved transcripts.";
-        setTranscriptsLoadError(msg);
-        setSavedTranscripts([]);
-      }
+      const res = await fetch(t.downloadUrl, { credentials: "include" });
+      if (!res.ok) return;
+      const raw = await res.text();
+      const bySpeaker = parseBySpeakerFromSavedTxt(raw);
+      setText(bySpeaker);
+      setOriginalSpeakerText(bySpeaker);
+      setSpeakerText(bySpeaker);
+      setSpeakerRenames({});
+      setTimings(null);
+      setViewingTranscriptName(t.originalFileName);
+      setViewingTranscriptId(t.id);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } catch {
-      setTranscriptsLoadError("Could not load saved transcripts. Check your connection.");
-      setSavedTranscripts([]);
+      // ignore
     }
-  }, [session]);
+  }, []);
 
   useEffect(() => {
     if (session && typeof session === "object") fetchSavedTranscripts();
   }, [session, fetchSavedTranscripts]);
 
   useEffect(() => {
-    if (jobState === "completed") fetchSavedTranscripts();
+    if (!session || typeof session !== "object") return;
+    const onFocus = () => fetchSavedTranscripts();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [session, fetchSavedTranscripts]);
+
+  // When a job completes, refetch saved transcripts immediately and again after short delays
+  // so the new transcript is visible even if the server write is slightly delayed.
+  useEffect(() => {
+    if (jobState !== "completed") return;
+    fetchSavedTranscripts();
+    const t1 = setTimeout(fetchSavedTranscripts, 1500);
+    const t2 = setTimeout(fetchSavedTranscripts, 4000);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, [jobState, fetchSavedTranscripts]);
 
   // Re-render periodically while uploading so "Starting job" appears after 45s if server is slow
@@ -471,14 +561,14 @@ export default function Home() {
           localStorage.removeItem(STORAGE_KEY);
           return;
         }
-        // #region agent log
-        DEBUG_LOG("restore_from_storage", { jobId: stored.jobId, state: data.state }, "H5");
-        // #endregion
+        if (data.state === "failed") {
+          localStorage.removeItem(STORAGE_KEY);
+          return;
+        }
         setJobId(stored.jobId);
         setJobState(data.state);
         setJobProgress(data.progress ?? null);
         if (stored.fileName) setJobFileName(stored.fileName);
-        if (data.state === "failed") setError(toUserMessage(data.error ?? "Transcription failed."));
         if (data.state === "completed" && data.result) {
           setText(data.result.text);
           setOriginalSpeakerText(data.result.speakerText);
@@ -505,11 +595,18 @@ export default function Home() {
         setError("File is empty. Please choose an audio file with content.");
         return;
       }
+      if (!isAcceptedFile(audioFile)) {
+        setError("Unsupported file format. Use one of: m4a, m4v, mp3, wav, aac, webm, qta, flac, ogg, mp4, mpeg, mpga, mov.");
+        return;
+      }
       setError(null);
       setJobId(null);
       setJobState(null);
       setJobProgress(null);
+      setFileInfo(null);
       setJobFileName(null);
+      setViewingTranscriptName(null);
+      setViewingTranscriptId(null);
       setText("");
       setSpeakerText("");
       setOriginalSpeakerText("");
@@ -518,9 +615,6 @@ export default function Home() {
       setIsUploading(true);
       setUploadProgress(null);
       uploadStartedAtRef.current = Date.now();
-      // #region agent log
-      DEBUG_LOG("upload_start", { fileName: audioFile.name, size: audioFile.size }, "H1");
-      // #endregion
 
       const form = new FormData();
       form.append("file", audioFile);
@@ -539,18 +633,14 @@ export default function Home() {
       });
 
       const done = () => {
-        DEBUG_LOG("upload_finally", {}, "H3");
         setIsUploading(false);
         setUploadProgress(null);
       };
 
       xhr.onload = () => {
-        // #region agent log
-        DEBUG_LOG("upload_fetch_resolved", { status: xhr.status, ok: xhr.status >= 200 && xhr.status < 300 }, "H1");
-        // #endregion
         const contentType = xhr.getResponseHeader("content-type") ?? "";
         const raw = xhr.responseText;
-        let data: { jobId?: string; error?: string; state?: JobState; result?: JobResponse["result"] };
+        let data: { jobId?: string; error?: string; state?: JobState; result?: JobResponse["result"]; fileInfo?: FileInfo };
         try {
           if (!contentType.includes("application/json")) {
             setError("Something went wrong. Please try again.");
@@ -579,11 +669,9 @@ export default function Home() {
           return;
         }
         const id = data.jobId as string;
-        // #region agent log
-        DEBUG_LOG("upload_success", { jobId: id, state: data.state }, "H3");
-        // #endregion
         setJobId(id);
         setJobFileName(audioFile.name);
+        if (data.fileInfo) setFileInfo(data.fileInfo);
         try {
           localStorage.setItem(STORAGE_KEY, JSON.stringify({ jobId: id, fileName: audioFile.name }));
         } catch {
@@ -619,9 +707,6 @@ export default function Home() {
       // 10 minutes: server returns as soon as file is saved (then transcription runs in background). Long timeout for slow uploads or slow server receive.
       xhr.timeout = 600_000;
 
-      // #region agent log
-      DEBUG_LOG("upload_fetch_start", {}, "H1");
-      // #endregion
       xhr.send(form);
     },
     [languageHint, knownSpeakers, setSession]
@@ -629,6 +714,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!jobId || jobState === "completed" || jobState === "failed") return;
+    pollFailuresRef.current = 0;
     const interval = setInterval(async () => {
       try {
         const res = await fetch(`/api/jobs/${jobId}`);
@@ -636,34 +722,43 @@ export default function Home() {
         try {
           data = (await res.json()) as JobResponse;
         } catch {
-          setError("We couldn't check the status. Please refresh and try again.");
-          setJobState("failed");
+          pollFailuresRef.current = (pollFailuresRef.current ?? 0) + 1;
+          if (pollFailuresRef.current >= 3) {
+            setError("We couldn't check the status. Please refresh and try again.");
+            setJobState("failed");
+            localStorage.removeItem(STORAGE_KEY);
+          }
           return;
         }
-        // #region agent log
-        DEBUG_LOG("poll_response", { state: data.state, ok: res.ok, jobId }, "H4");
-        // #endregion
+        pollFailuresRef.current = 0;
         if (!res.ok) {
           setError(toUserMessage((data as { error?: string }).error ?? "Something went wrong. Please try again."));
           setJobState("failed");
+          localStorage.removeItem(STORAGE_KEY);
           return;
         }
         setJobState(data.state);
         setJobProgress(data.progress ?? null);
-        // #region agent log
-        DEBUG_LOG("poll_set_state", { state: data.state }, "H4");
-        // #endregion
-        if (data.state === "failed") setError(toUserMessage(data.error ?? "Transcription failed."));
+        if (data.state === "failed") {
+          setError(toUserMessage(data.error ?? "Transcription failed."));
+          localStorage.removeItem(STORAGE_KEY);
+        }
         if (data.state === "completed" && data.result) {
           setText(data.result.text);
           setOriginalSpeakerText(data.result.speakerText);
           setSpeakerText(data.result.speakerText);
           setSpeakerRenames({});
           setTimings(data.result.timings ?? null);
+          setViewingTranscriptName(null);
+          setViewingTranscriptId(null);
         }
       } catch (err) {
-        setError("Network error. Check your connection and try again.");
-        setJobState("failed");
+        pollFailuresRef.current = (pollFailuresRef.current ?? 0) + 1;
+        if (pollFailuresRef.current >= 3) {
+          setError("Network error. Check your connection and try again.");
+          setJobState("failed");
+          localStorage.removeItem(STORAGE_KEY);
+        }
       }
     }, 1500);
     return () => clearInterval(interval);
@@ -821,6 +916,15 @@ export default function Home() {
                 </div>
                 <span className="inline-block h-10 w-10 animate-spin rounded-full border-2 border-zinc-500 border-t-emerald-400" />
                 <p className="text-lg font-medium text-zinc-200">{statusLabel}</p>
+                {fileInfo && (
+                  <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-zinc-400">
+                    <span>{fileInfo.durationFormatted} duration</span>
+                    <span className="text-zinc-600">·</span>
+                    <span>{fileInfo.sizeMb} MB</span>
+                    <span className="text-zinc-600">·</span>
+                    <span>{fileInfo.chunkCount} {fileInfo.chunkCount === 1 ? "chunk" : "chunks"}</span>
+                  </div>
+                )}
                 <p className={`text-xs text-zinc-500 text-center ${step === "queue" && isUploading ? "max-w-sm" : "max-w-xs"}`}>
                   {step === "upload"
                     ? "Large files can take 1–2 minutes."
@@ -841,12 +945,14 @@ export default function Home() {
                   )}
                 </div>
               </div>
-            ) : file && !isBusy && (jobState === "completed" || jobState === "failed") ? (
+            ) : !isBusy && (jobState === "completed" || jobState === "failed") ? (
               <div className="flex flex-col items-center gap-3 px-4">
                 <p className="text-sm text-zinc-400">Drop another file to transcribe</p>
-                <span className="text-sm font-medium text-zinc-200 truncate max-w-xs" title={file.name}>
-                  Last: {file.name}
-                </span>
+                {(file || jobFileName) && (
+                  <span className="text-sm font-medium text-zinc-200 truncate max-w-xs" title={file?.name ?? jobFileName ?? ""}>
+                    Last: {file?.name ?? jobFileName}
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
@@ -911,7 +1017,7 @@ export default function Home() {
         </details>
 
         {/* Error - impossible to miss (only when not showing the failed-job strip below) */}
-        {error && !(jobId && jobState === "failed") && (
+        {error && jobState !== "failed" && (
           <div className="mb-6 rounded-xl border-2 border-red-500 bg-red-950/60 px-5 py-4 shadow-lg ring-2 ring-red-500/20">
             <p className="font-semibold text-red-100">Error</p>
             <p className="mt-1 text-red-200">{error}</p>
@@ -924,7 +1030,7 @@ export default function Home() {
         )}
 
         {/* Done / Failed state strip (single place for job outcome) */}
-        {jobId && (jobState === "completed" || jobState === "failed") && (
+        {(jobState === "completed" || jobState === "failed") && (
           <div
             className={`mb-6 rounded-xl border px-4 py-3 ${
               jobState === "failed"
@@ -938,9 +1044,14 @@ export default function Home() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
                 <span className="font-medium">Done</span>
+                {jobFileName && (
+                  <span className="text-emerald-300/90 truncate max-w-xs" title={jobFileName}>
+                    · {jobFileName}
+                  </span>
+                )}
                 {timings && (
                   <span className="text-emerald-300/90">
-                    · Processed in {(timings.endToEndMs / 1000).toFixed(1)}s
+                    · Processed in {formatDurationMs(timings.endToEndMs)}
                   </span>
                 )}
               </div>
@@ -958,6 +1069,17 @@ export default function Home() {
           </div>
         )}
 
+        {/* Viewing saved transcript banner */}
+        {viewingTranscriptName && !jobState && (
+          <div className="mb-6 flex items-center gap-3 rounded-xl border border-emerald-800/60 bg-emerald-950/20 px-4 py-3 text-emerald-200">
+            <svg className="h-5 w-5 shrink-0 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <span className="font-medium">Viewing</span>
+            <span className="truncate text-emerald-300/90" title={viewingTranscriptName}>· {viewingTranscriptName}</span>
+          </div>
+        )}
+
         {/* Output */}
         {(text || speakerText) && (
           <section className="space-y-6">
@@ -965,16 +1087,16 @@ export default function Home() {
             {session.isAdmin && timings && (
               <div className="rounded-xl border-2 border-red-800/60 bg-zinc-900/40 p-4">
                 <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
-                  Timing
+                  Timing Stats for Admins
                 </h3>
                 <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-zinc-400">
-                  <span>Upload: {(timings.uploadMs / 1000).toFixed(2)}s</span>
-                  <span>Queue: {(timings.queueWaitMs / 1000).toFixed(2)}s</span>
-                  <span>Chunking: {(timings.chunkingMs / 1000).toFixed(2)}s</span>
-                  <span>API: {(timings.perChunk.reduce((s, c) => s + c.totalMs, 0) / 1000).toFixed(2)}s</span>
-                  <span>Stitching: {(timings.stitchingMs / 1000).toFixed(2)}s</span>
+                  <span>Upload: {formatDurationMs(timings.uploadMs)}</span>
+                  <span>Queue: {formatDurationMs(timings.queueWaitMs)}</span>
+                  <span>Chunking: {formatDurationMs(timings.chunkingMs)}</span>
+                  <span>API: {formatDurationMs(timings.perChunk.reduce((s, c) => s + c.totalMs, 0))}</span>
+                  <span>Stitching: {formatDurationMs(timings.stitchingMs)}</span>
                   <span className="font-semibold text-zinc-200">
-                    End-to-end: {(timings.endToEndMs / 1000).toFixed(2)}s
+                    End-to-end: {formatDurationMs(timings.endToEndMs)}
                   </span>
                   {timings.bottleneck && (
                     <span className="text-amber-400">Bottleneck: {timings.bottleneck.replace("_", " ")}</span>
@@ -982,117 +1104,6 @@ export default function Home() {
                 </div>
               </div>
             )}
-
-            {/* Transcript - plain text */}
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900/40">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 bg-zinc-800/50 px-4 py-3">
-                <h2 className="font-semibold text-zinc-200">Transcript</h2>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void navigator.clipboard.writeText(text).then(() => setCopiedWhich("transcript"));
-                    }}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                      copiedWhich === "transcript"
-                        ? "bg-emerald-600 text-white"
-                        : "bg-zinc-700 hover:bg-zinc-600"
-                    }`}
-                  >
-                    {copiedWhich === "transcript" ? "Copied!" : "Copy"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => downloadBlob(new Blob([text], { type: "text/plain" }), "transcript.txt")}
-                    className="rounded-lg bg-zinc-700 px-3 py-1.5 text-xs font-medium hover:bg-zinc-600"
-                  >
-                    TXT
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const rows =
-                        speakerText.trim().length > 0
-                          ? speakerText
-                              .split("\n")
-                              .filter((line) => line.trim().length > 0)
-                              .map((line) => {
-                                const i = line.indexOf(":");
-                                const speaker = i >= 0 ? line.slice(0, i).trim() : "";
-                                const content = i >= 0 ? line.slice(i + 1).trim() : line;
-                                return `"${speaker.replace(/"/g, '""')}","${content.replace(/"/g, '""')}"`;
-                              })
-                          : [[`"${text.replace(/"/g, '""')}"`]];
-                      const header = speakerText.trim().length > 0 ? "Speaker,Text\n" : "Text\n";
-                      const csvBody = Array.isArray(rows[0]) ? (rows as string[][]).map((r) => r.join(",")).join("\n") : (rows as string[]).join("\n");
-                      downloadBlob(new Blob(["\uFEFF" + header + csvBody], { type: "text/csv" }), "transcript.csv");
-                    }}
-                    className="rounded-lg bg-zinc-700 px-3 py-1.5 text-xs font-medium hover:bg-zinc-600"
-                  >
-                    CSV
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const json = JSON.stringify({ text, speakerText, timings }, null, 2);
-                      downloadBlob(new Blob([json], { type: "application/json" }), "transcript.json");
-                    }}
-                    className="rounded-lg bg-zinc-700 px-3 py-1.5 text-xs font-medium hover:bg-zinc-600"
-                  >
-                    JSON
-                  </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import("docx");
-                        const transcriptParas = text
-                          .split(/\r?\n/)
-                          .map((line) => new Paragraph({ children: [new TextRun({ text: line || " " })] }));
-                        const children: (typeof transcriptParas)[0][] = [
-                          new Paragraph({
-                            text: "Transcript",
-                            heading: HeadingLevel.HEADING_1,
-                          }),
-                          ...transcriptParas,
-                        ];
-                        if (speakerText.trim()) {
-                          const speakerParas = speakerText
-                            .split(/\r?\n/)
-                            .filter((l) => l.trim())
-                            .map((line) => new Paragraph({ children: [new TextRun({ text: line })] }));
-                          children.push(
-                            new Paragraph({ text: "" }),
-                            new Paragraph({
-                              text: "By speaker",
-                              heading: HeadingLevel.HEADING_1,
-                            }),
-                            ...speakerParas
-                          );
-                        }
-                        const doc = new Document({
-                          sections: [{ children }],
-                        });
-                        const blob = await Packer.toBlob(doc);
-                        downloadBlob(blob, "transcript.docx");
-                      } catch (e) {
-                        console.error("Word export failed:", e);
-                      }
-                    }}
-                    className="rounded-lg bg-zinc-700 px-3 py-1.5 text-xs font-medium hover:bg-zinc-600"
-                  >
-                    Word
-                  </button>
-                </div>
-              </div>
-              <textarea
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                className="min-h-[320px] w-full resize border-0 bg-transparent p-4 text-zinc-200 placeholder-zinc-500 focus:ring-0"
-                placeholder="Transcript will appear here…"
-                title="Drag the corner to resize"
-              />
-            </div>
 
             {/* Rename speakers - show whenever there are speaker labels (A, B, C, …) */}
             {speakerLabels.length >= 1 && (
@@ -1119,10 +1130,22 @@ export default function Home() {
               </div>
             )}
 
-            {/* Speaker transcript */}
+            {/* Transcript */}
             <div className="rounded-xl border border-zinc-800 bg-zinc-900/40">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 bg-zinc-800/50 px-4 py-3">
-                <h2 className="font-semibold text-zinc-200">By speaker</h2>
+                <div className="flex flex-col gap-0.5">
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-semibold text-zinc-200">Transcript</h2>
+                    {viewingTranscriptId && (
+                      <span className="text-xs text-zinc-500">{saving ? "Saving…" : "Auto-saved"}</span>
+                    )}
+                  </div>
+                  {(viewingTranscriptName || jobFileName) && (
+                    <p className="text-xs text-zinc-400 truncate max-w-xs" title={viewingTranscriptName ?? jobFileName ?? ""}>
+                      {viewingTranscriptName ?? jobFileName}
+                    </p>
+                  )}
+                </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
@@ -1139,45 +1162,49 @@ export default function Home() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => downloadBlob(new Blob([speakerText], { type: "text/plain" }), "by-speaker.txt")}
+                    onClick={() => downloadBlob(new Blob([stripSpeakerLabels(speakerText)], { type: "text/plain" }), "transcript-plain.txt")}
                     className="rounded-lg bg-zinc-700 px-3 py-1.5 text-xs font-medium hover:bg-zinc-600"
+                    title="Text only, no speaker labels"
+                  >
+                    Plain
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => downloadBlob(new Blob([speakerText], { type: "text/plain" }), "transcript.txt")}
+                    className="rounded-lg bg-zinc-700 px-3 py-1.5 text-xs font-medium hover:bg-zinc-600"
+                    title="With speaker labels (A: text)"
                   >
                     TXT
                   </button>
                   <button
                     type="button"
                     onClick={() => {
-                      const rows =
-                        speakerText.trim().length > 0
-                          ? speakerText
-                              .split("\n")
-                              .filter((line) => line.trim().length > 0)
-                              .map((line) => {
-                                const i = line.indexOf(":");
-                                const speaker = i >= 0 ? line.slice(0, i).trim() : "";
-                                const content = i >= 0 ? line.slice(i + 1).trim() : line;
-                                return `"${speaker.replace(/"/g, '""')}","${content.replace(/"/g, '""')}"`;
-                              })
-                          : [];
+                      const rows = speakerText
+                        .split("\n")
+                        .filter((line) => line.trim().length > 0)
+                        .map((line) => {
+                          const i = line.indexOf(": ");
+                          const speaker = i > 0 ? line.slice(0, i).trim() : "";
+                          const content = i > 0 ? line.slice(i + 2).trim() : line;
+                          return `"${speaker.replace(/"/g, '""')}","${content.replace(/"/g, '""')}"`;
+                        });
                       const header = "Speaker,Text\n";
-                      const csvBody = rows.join("\n");
-                      downloadBlob(new Blob(["\uFEFF" + header + csvBody], { type: "text/csv" }), "by-speaker.csv");
+                      downloadBlob(new Blob(["\uFEFF" + header + rows.join("\n")], { type: "text/csv" }), "transcript.csv");
                     }}
                     className="rounded-lg bg-zinc-700 px-3 py-1.5 text-xs font-medium hover:bg-zinc-600"
+                    title="Spreadsheet with Speaker and Text columns"
                   >
                     CSV
                   </button>
                   <button
                     type="button"
                     onClick={() => {
-                      const json = JSON.stringify(
-                        timings ? { speakerText, timings } : { speakerText },
-                        null,
-                        2
-                      );
-                      downloadBlob(new Blob([json], { type: "application/json" }), "by-speaker.json");
+                      const plain = stripSpeakerLabels(speakerText);
+                      const json = JSON.stringify({ plainText: plain, speakerText, ...(timings ? { timings } : {}) }, null, 2);
+                      downloadBlob(new Blob([json], { type: "application/json" }), "transcript.json");
                     }}
                     className="rounded-lg bg-zinc-700 px-3 py-1.5 text-xs font-medium hover:bg-zinc-600"
+                    title="JSON with plain text and speaker text"
                   >
                     JSON
                   </button>
@@ -1186,30 +1213,32 @@ export default function Home() {
                     onClick={async () => {
                       try {
                         const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import("docx");
+                        const plain = stripSpeakerLabels(speakerText);
+                        const plainParas = plain
+                          .split(/\r?\n/)
+                          .map((line) => new Paragraph({ children: [new TextRun({ text: line || " " })] }));
                         const speakerParas = speakerText
                           .split(/\r?\n/)
                           .filter((l) => l.trim())
                           .map((line) => new Paragraph({ children: [new TextRun({ text: line })] }));
                         const doc = new Document({
-                          sections: [
-                            {
-                              children: [
-                                new Paragraph({
-                                  text: "By speaker",
-                                  heading: HeadingLevel.HEADING_1,
-                                }),
-                                ...speakerParas,
-                              ],
-                            },
-                          ],
+                          sections: [{
+                            children: [
+                              new Paragraph({ text: "Transcript", heading: HeadingLevel.HEADING_1 }),
+                              ...plainParas,
+                              new Paragraph({ text: "" }),
+                              new Paragraph({ text: "With speakers", heading: HeadingLevel.HEADING_1 }),
+                              ...speakerParas,
+                            ],
+                          }],
                         });
-                        const blob = await Packer.toBlob(doc);
-                        downloadBlob(blob, "by-speaker.docx");
+                        downloadBlob(await Packer.toBlob(doc), "transcript.docx");
                       } catch (e) {
                         console.error("Word export failed:", e);
                       }
                     }}
                     className="rounded-lg bg-zinc-700 px-3 py-1.5 text-xs font-medium hover:bg-zinc-600"
+                    title="Word doc with both plain and speaker sections"
                   >
                     Word
                   </button>
@@ -1217,7 +1246,15 @@ export default function Home() {
               </div>
               <textarea
                 value={speakerText}
-                onChange={(e) => setSpeakerText(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSpeakerText(val);
+                  if (viewingTranscriptId) {
+                    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+                    const id = viewingTranscriptId;
+                    saveTimerRef.current = setTimeout(() => { void saveTranscriptToDisk(id, val); }, 800);
+                  }
+                }}
                 className="min-h-[280px] w-full resize border-0 bg-transparent p-4 font-mono text-sm text-zinc-300 placeholder-zinc-500 focus:ring-0"
                 placeholder="Speaker transcript…"
                 title="Drag the corner to resize"
@@ -1226,11 +1263,21 @@ export default function Home() {
           </section>
         )}
 
-        {/* Saved transcripts - persisted to server folder */}
+        {/* Saved transcripts - your history */}
         <section className="mt-10 border-t border-zinc-800 pt-8">
-          <h2 className="mb-3 text-lg font-semibold text-zinc-200">Saved transcripts</h2>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold text-zinc-200">Saved transcripts</h2>
+            <button
+              type="button"
+              onClick={() => fetchSavedTranscripts()}
+              disabled={transcriptsLoading}
+              className="rounded-lg border border-zinc-600 bg-zinc-800 px-3 py-1.5 text-sm font-medium text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
+            >
+              {transcriptsLoading ? "Loading…" : "Refresh list"}
+            </button>
+          </div>
           <p className="mb-4 text-sm text-zinc-500">
-            Each completed job is saved and listed here. You can download any transcript from this list.
+            Your transcription history. Each completed job is saved and listed here. You can download any transcript from this list.
           </p>
           {transcriptsLoadError && (
             <div className="mb-4 rounded-xl border border-amber-700 bg-amber-950/40 px-4 py-3 text-sm text-amber-200">
@@ -1244,7 +1291,11 @@ export default function Home() {
               </button>
             </div>
           )}
-          {savedTranscripts.length === 0 && !transcriptsLoadError ? (
+          {transcriptsLoading && savedTranscripts.length === 0 ? (
+            <div className="mb-4 rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-6 text-center text-sm text-zinc-400">
+              Loading your transcripts…
+            </div>
+          ) : savedTranscripts.length === 0 && !transcriptsLoadError ? (
             <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-6 text-center text-sm text-zinc-500">
               <p>No saved transcripts yet. Complete a transcription to see it here.</p>
               <p className="mt-2 text-xs text-zinc-600">
@@ -1256,18 +1307,36 @@ export default function Home() {
               {savedTranscripts.map((t) => (
                 <li
                   key={t.id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-3"
+                  className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border px-4 py-3 transition-colors ${
+                    viewingTranscriptId === t.id
+                      ? "border-emerald-700 bg-emerald-950/30 ring-1 ring-emerald-700/40"
+                      : "border-zinc-800 bg-zinc-900/40 hover:border-zinc-600 hover:bg-zinc-800/60"
+                  }`}
                 >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-zinc-200" title={t.originalFileName}>
+                  <button
+                    type="button"
+                    onClick={() => loadSavedTranscript(t)}
+                    className="min-w-0 flex-1 text-left"
+                  >
+                    <p className="truncate text-sm font-medium text-zinc-200 hover:text-white" title={`${t.originalFileName} — click to view`}>
                       {t.originalFileName}
+                      {viewingTranscriptId === t.id && (
+                        <span className="ml-2 inline-block rounded bg-emerald-800/60 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-emerald-300">
+                          Viewing
+                        </span>
+                      )}
                     </p>
                     <p className="text-xs text-zinc-500">
-                      Processed in <strong className="text-zinc-400">{t.endToEndSec}s</strong>
+                      Processed in <strong className="text-zinc-400">{formatDurationMs(t.endToEndMs)}</strong>
                       {" · "}
                       {new Date(t.createdAt).toLocaleString()}
                     </p>
-                  </div>
+                    {t.speakers && t.speakers.length > 0 && (
+                      <p className="text-xs text-zinc-500">
+                        {t.speakers.length} {t.speakers.length === 1 ? "Speaker" : "Speakers"}: <span className="text-zinc-400">{t.speakers.join(", ")}</span>
+                      </p>
+                    )}
+                  </button>
                   <div className="relative shrink-0">
                     <button
                       type="button"
@@ -1278,15 +1347,7 @@ export default function Home() {
                     </button>
                     {savedDownloadOpenId === t.id && (
                       <div className="absolute right-0 top-full z-10 mt-1 flex flex-col rounded-lg border border-zinc-700 bg-zinc-800 py-1 shadow-lg">
-                        <a
-                          href={t.downloadUrl}
-                          download
-                          className="whitespace-nowrap px-4 py-2 text-left text-sm text-zinc-200 hover:bg-zinc-700"
-                          onClick={() => setSavedDownloadOpenId(null)}
-                        >
-                          Full transcript (.txt)
-                        </a>
-                        {(["TXT", "CSV", "JSON", "Word"] as const).map((format) => (
+                        {(["Plain", "With speakers", "CSV", "JSON", "Word"] as const).map((format) => (
                           <button
                             key={format}
                             type="button"
@@ -1296,73 +1357,59 @@ export default function Home() {
                               const base = safeDownloadBasename(t.originalFileName);
                               try {
                                 const res = await fetch(t.downloadUrl);
-                                const content = await res.text();
-                                const speakerText = parseBySpeakerFromSavedTxt(content);
-                                if (format === "TXT") {
-                                  downloadBlob(
-                                    new Blob([speakerText], { type: "text/plain" }),
-                                    `${base}-by-speaker.txt`
-                                  );
+                                const raw = await res.text();
+                                const bySpeaker = parseBySpeakerFromSavedTxt(raw);
+                                const plain = parsePlainFromSavedTxt(raw) || stripSpeakerLabels(bySpeaker);
+                                if (format === "Plain") {
+                                  downloadBlob(new Blob([plain], { type: "text/plain" }), `${base}.txt`);
+                                } else if (format === "With speakers") {
+                                  downloadBlob(new Blob([bySpeaker], { type: "text/plain" }), `${base}-speakers.txt`);
                                 } else if (format === "CSV") {
-                                  const rows =
-                                    speakerText.trim().length > 0
-                                      ? speakerText
-                                          .split("\n")
-                                          .filter((line) => line.trim().length > 0)
-                                          .map((line) => {
-                                            const i = line.indexOf(":");
-                                            const speaker = i >= 0 ? line.slice(0, i).trim() : "";
-                                            const content = i >= 0 ? line.slice(i + 1).trim() : line;
-                                            return `"${speaker.replace(/"/g, '""')}","${content.replace(/"/g, '""')}"`;
-                                          })
-                                      : [];
-                                  const header = "Speaker,Text\n";
-                                  const csvBody = rows.join("\n");
+                                  const rows = bySpeaker
+                                    .split("\n")
+                                    .filter((line) => line.trim().length > 0)
+                                    .map((line) => {
+                                      const i = line.indexOf(": ");
+                                      const speaker = i > 0 ? line.slice(0, i).trim() : "";
+                                      const content = i > 0 ? line.slice(i + 2).trim() : line;
+                                      return `"${speaker.replace(/"/g, '""')}","${content.replace(/"/g, '""')}"`;
+                                    });
                                   downloadBlob(
-                                    new Blob(["\uFEFF" + header + csvBody], { type: "text/csv" }),
-                                    `${base}-by-speaker.csv`
+                                    new Blob(["\uFEFFSpeaker,Text\n" + rows.join("\n")], { type: "text/csv" }),
+                                    `${base}.csv`
                                   );
                                 } else if (format === "JSON") {
-                                  const json = JSON.stringify({ speakerText }, null, 2);
                                   downloadBlob(
-                                    new Blob([json], { type: "application/json" }),
-                                    `${base}-by-speaker.json`
+                                    new Blob([JSON.stringify({ plainText: plain, speakerText: bySpeaker }, null, 2)], { type: "application/json" }),
+                                    `${base}.json`
                                   );
                                 } else {
-                                  const { Document, Packer, Paragraph, TextRun, HeadingLevel } =
-                                    await import("docx");
-                                  const speakerParas = speakerText
-                                    .split(/\r?\n/)
-                                    .filter((l) => l.trim())
-                                    .map((line) =>
-                                      new Paragraph({ children: [new TextRun({ text: line })] })
-                                    );
+                                  const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import("docx");
+                                  const plainParas = plain.split(/\r?\n/).map((line) => new Paragraph({ children: [new TextRun({ text: line || " " })] }));
+                                  const speakerParas = bySpeaker.split(/\r?\n/).filter((l) => l.trim()).map((line) => new Paragraph({ children: [new TextRun({ text: line })] }));
                                   const doc = new Document({
-                                    sections: [
-                                      {
-                                        children: [
-                                          new Paragraph({
-                                            text: "By speaker",
-                                            heading: HeadingLevel.HEADING_1,
-                                          }),
-                                          ...speakerParas,
-                                        ],
-                                      },
-                                    ],
+                                    sections: [{
+                                      children: [
+                                        new Paragraph({ text: "Transcript", heading: HeadingLevel.HEADING_1 }),
+                                        ...plainParas,
+                                        new Paragraph({ text: "" }),
+                                        new Paragraph({ text: "With speakers", heading: HeadingLevel.HEADING_1 }),
+                                        ...speakerParas,
+                                      ],
+                                    }],
                                   });
-                                  const blob = await Packer.toBlob(doc);
-                                  downloadBlob(blob, `${base}-by-speaker.docx`);
+                                  downloadBlob(await Packer.toBlob(doc), `${base}.docx`);
                                 }
                               } catch (e) {
                                 console.error("Download failed:", e);
                               }
                             }}
                           >
-                            {format === "TXT"
-                              ? "By speaker (.txt)"
-                              : format === "Word"
-                                ? "Word (.docx)"
-                                : format}
+                            {format === "Plain" ? "Plain text (.txt)"
+                              : format === "With speakers" ? "With speakers (.txt)"
+                              : format === "CSV" ? "Spreadsheet (.csv)"
+                              : format === "JSON" ? "JSON (.json)"
+                              : "Word (.docx)"}
                           </button>
                         ))}
                       </div>

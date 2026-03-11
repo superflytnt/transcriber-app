@@ -3,6 +3,7 @@ import path from "node:path";
 import type { JobTimings } from "./queue";
 import { ensureDirectory } from "./files";
 import { safeTranscriptBasename } from "./files";
+import { formatDurationMs } from "./format-duration";
 
 export type SavedTranscriptMeta = {
   id: string;
@@ -32,13 +33,14 @@ export async function saveTranscript(
   const txtPath = path.join(saveDir, `${slug}.txt`);
   const jsonPath = path.join(saveDir, `${slug}.json`);
 
+  const apiMs = timings.perChunk.reduce((s, c) => s + c.totalMs, 0);
   const statsBlock = [
     "--- Transcript statistics ---",
-    `Processed in: ${(timings.endToEndMs / 1000).toFixed(2)}s`,
-    `Upload: ${(timings.uploadMs / 1000).toFixed(2)}s | Queue wait: ${(timings.queueWaitMs / 1000).toFixed(2)}s`,
-    `Chunking: ${(timings.chunkingMs / 1000).toFixed(2)}s (${timings.chunkCount} chunk(s))`,
-    `Transcription API: ${(timings.perChunk.reduce((s, c) => s + c.totalMs, 0) / 1000).toFixed(2)}s`,
-    `Stitching: ${(timings.stitchingMs / 1000).toFixed(2)}s`,
+    `Processed in: ${formatDurationMs(timings.endToEndMs)}`,
+    `Upload: ${formatDurationMs(timings.uploadMs)} | Queue wait: ${formatDurationMs(timings.queueWaitMs)}`,
+    `Chunking: ${formatDurationMs(timings.chunkingMs)} (${timings.chunkCount} chunk(s))`,
+    `Transcription API: ${formatDurationMs(apiMs)}`,
+    `Stitching: ${formatDurationMs(timings.stitchingMs)}`,
     timings.bottleneck ? `Bottleneck: ${timings.bottleneck.replace("_", " ")}` : "",
     "--------------------------------",
     "",
@@ -48,6 +50,15 @@ export async function saveTranscript(
 
   const txtContent = statsBlock + "--- Plain transcript ---\n\n" + text + "\n\n--- By speaker ---\n\n" + speakerText + "\n";
   await fs.writeFile(txtPath, txtContent, "utf-8");
+
+  const speakers = Array.from(
+    new Set(
+      speakerText
+        .split(/\r?\n/)
+        .map((line) => { const i = line.indexOf(": "); return i > 0 ? line.slice(0, i) : ""; })
+        .filter(Boolean)
+    )
+  ).sort();
 
   const meta: SavedTranscriptMeta = {
     id: slug,
@@ -63,6 +74,7 @@ export async function saveTranscript(
     JSON.stringify(
       {
         ...meta,
+        speakers,
         timings,
         textLength: text.length,
         speakerTextLength: speakerText.length,

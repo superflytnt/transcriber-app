@@ -23,6 +23,8 @@ export const env = {
   },
   chunkTargetMb: Number(process.env.CHUNK_TARGET_MB ?? "20"),
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB ?? "200"),
+  /** Per-chunk timeout for OpenAI transcription (ms). Prevents a single chunk from hanging forever. Default 30 min. */
+  transcriptionChunkTimeoutMs: Number(process.env.TRANSCRIPTION_CHUNK_TIMEOUT_MS ?? "1800000"),
   pollIntervalMs: Number(process.env.POLL_INTERVAL_MS ?? "2000"),
   sessionSecret: maybeEnv("SESSION_SECRET"),
   appUrl: (process.env.APP_URL ?? "").replace(/\/$/, ""),

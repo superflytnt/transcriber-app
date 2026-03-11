@@ -66,6 +66,7 @@ export async function countAdmins(): Promise<number> {
 export async function isAdmin(email: string): Promise<boolean> {
   const normalized = email.trim().toLowerCase();
   if (!normalized) return false;
+  await ensureFirstAdmin();
   const r = await getRedis();
   if (r) {
     return (await r.sismember(ADMINS_KEY, normalized)) === 1;
@@ -80,6 +81,7 @@ export async function listUsers(options: {
   limit: number;
   search?: string;
 }): Promise<ListUsersResult> {
+  await ensureFirstAdmin();
   const { offset, limit, search = "" } = options;
   const searchLower = search.trim().toLowerCase();
   const r = await getRedis();
@@ -108,8 +110,12 @@ export async function ensureFirstAdmin(): Promise<void> {
   const r = await getRedis();
   if (r) {
     const n = await r.scard(ADMINS_KEY);
-    if (n === 0) await r.sadd(ADMINS_KEY, FIRST_ADMIN_EMAIL);
+    if (n === 0) {
+      await r.sadd(ADMINS_KEY, FIRST_ADMIN_EMAIL);
+      await r.sadd(USER_EMAILS_KEY, FIRST_ADMIN_EMAIL);
+    }
   } else {
     if (memoryAdmins.size === 0) memoryAdmins.add(FIRST_ADMIN_EMAIL);
+    if (!memoryUserEmails.has(FIRST_ADMIN_EMAIL)) memoryUserEmails.add(FIRST_ADMIN_EMAIL);
   }
 }

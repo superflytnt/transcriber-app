@@ -38,7 +38,7 @@ function resolveFfprobe(): string {
 ffmpeg.setFfmpegPath(resolveFfmpeg());
 ffmpeg.setFfprobePath(resolveFfprobe());
 
-const getAudioInfo = async (inputPath: string): Promise<AudioInfo> => {
+export const getAudioInfo = async (inputPath: string): Promise<AudioInfo> => {
   const stats = await fs.stat(inputPath);
 
   const durationSeconds = await new Promise<number>((resolve, reject) => {
@@ -70,6 +70,70 @@ const splitAudio = async (
   });
 };
 
+export type ChunkPlan = {
+  durationSeconds: number;
+  sizeMb: number;
+  chunkCount: number;
+  segmentSeconds: number;
+  durationFormatted: string;
+};
+
+const MAX_CHUNK_DURATION_SECONDS = 600;
+const MAX_CHUNK_SIZE_MB = 20;
+
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds % 60);
+  if (m === 0) return `${s}s`;
+  return `${m}m:${s.toString().padStart(2, "0")}s`;
+}
+
+function computeChunkPlan(info: AudioInfo, chunkTargetMb: number): ChunkPlan {
+  const targetBytes = Math.min(chunkTargetMb, MAX_CHUNK_SIZE_MB) * 1024 * 1024;
+  const sizeMb = Math.round((info.sizeBytes / (1024 * 1024)) * 10) / 10;
+
+  if (info.sizeBytes <= targetBytes && info.durationSeconds <= MAX_CHUNK_DURATION_SECONDS) {
+    return {
+      durationSeconds: info.durationSeconds,
+      sizeMb,
+      chunkCount: 1,
+      segmentSeconds: Math.ceil(info.durationSeconds),
+      durationFormatted: formatDuration(info.durationSeconds),
+    };
+  }
+
+  // Two constraints: each chunk must be under MAX_CHUNK_SIZE_MB and under MAX_CHUNK_DURATION_SECONDS.
+  // Pick the stricter of the two.
+  const bySize = info.sizeBytes > targetBytes
+    ? Math.max(60, Math.floor(info.durationSeconds * (targetBytes / info.sizeBytes) * 0.9))
+    : Infinity;
+  const byDuration = MAX_CHUNK_DURATION_SECONDS;
+  const segmentSeconds = Math.min(bySize, byDuration);
+  const chunkCount = Math.ceil(info.durationSeconds / segmentSeconds);
+
+  return {
+    durationSeconds: info.durationSeconds,
+    sizeMb,
+    chunkCount,
+    segmentSeconds,
+    durationFormatted: formatDuration(info.durationSeconds),
+  };
+}
+
+/**
+ * Compute chunk plan without splitting — returns file metrics and planned chunk count.
+ */
+export const planChunks = async (
+  inputPath: string,
+  chunkTargetMb: number
+): Promise<ChunkPlan> => {
+  const audioInfo = await getAudioInfo(inputPath);
+  if (audioInfo.durationSeconds <= 0) {
+    throw new Error("Unable to determine audio duration.");
+  }
+  return computeChunkPlan(audioInfo, chunkTargetMb);
+};
+
 export const createChunks = async (
   inputPath: string,
   workingDir: string,
@@ -80,26 +144,15 @@ export const createChunks = async (
     throw new Error("Unable to determine audio duration.");
   }
 
-  const targetBytes = chunkTargetMb * 1024 * 1024;
-  const maxChunkDurationSeconds = 1300;
+  const plan = computeChunkPlan(audioInfo, chunkTargetMb);
 
-  if (
-    audioInfo.sizeBytes <= targetBytes &&
-    audioInfo.durationSeconds <= maxChunkDurationSeconds
-  ) {
+  if (plan.chunkCount === 1) {
     return [{ filePath: inputPath, chunkIndex: 0, startSeconds: 0 }];
   }
 
-  // Slightly conservative segmenting to stay below provider size limits.
-  const ratio = targetBytes / audioInfo.sizeBytes;
-  const segmentSeconds = Math.min(
-    maxChunkDurationSeconds,
-    Math.max(60, Math.floor(audioInfo.durationSeconds * ratio * 0.9))
-  );
-
   const outputDir = path.join(workingDir, `chunks-${Date.now()}`);
   await fs.mkdir(outputDir, { recursive: true });
-  await splitAudio(inputPath, outputDir, segmentSeconds);
+  await splitAudio(inputPath, outputDir, plan.segmentSeconds);
 
   const outputFiles = (await fs.readdir(outputDir))
     .filter((fileName) => fileName.startsWith("chunk-"))
@@ -108,6 +161,6 @@ export const createChunks = async (
   return outputFiles.map((fileName, index) => ({
     filePath: path.join(outputDir, fileName),
     chunkIndex: index,
-    startSeconds: index * segmentSeconds,
+    startSeconds: index * plan.segmentSeconds,
   }));
 };

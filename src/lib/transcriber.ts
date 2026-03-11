@@ -17,11 +17,13 @@ async function ensureFileGlobal(): Promise<void> {
   (globalThis as unknown as { File: typeof File }).File = File;
 }
 
+let _client: OpenAI | null = null;
 function getClient(): OpenAI {
   if (!env.openAiApiKey) {
     throw new Error("OPENAI_API_KEY is required.");
   }
-  return new OpenAI({ apiKey: env.openAiApiKey });
+  if (!_client) _client = new OpenAI({ apiKey: env.openAiApiKey });
+  return _client;
 }
 
 type OpenAiDiarizedResponse = {
@@ -63,8 +65,10 @@ export const transcribeWithDiarization = async (
   const perChunk: PerChunkTiming[] = [];
 
   for (const chunk of chunks) {
-    onProgress?.(chunk.chunkIndex, totalChunks);
     const chunkStart = Date.now();
+    const chunkNum = chunk.chunkIndex + 1;
+    console.log(`[transcribe] Starting chunk ${chunkNum} of ${totalChunks}`);
+    onProgress?.(chunk.chunkIndex, totalChunks);
     let chunkSizeMb: number | undefined;
     try {
       const stat = await fsPromises.stat(chunk.filePath);
@@ -87,9 +91,10 @@ export const transcribeWithDiarization = async (
       requestPayload.known_speaker_names = knownSpeakerNames;
     }
 
-    const response = (await getClient().audio.transcriptions.create(
-      requestPayload as never
-    )) as OpenAiDiarizedResponse;
+    const timeoutMs = env.transcriptionChunkTimeoutMs;
+    const response = (await getClient().audio.transcriptions.create(requestPayload as never, {
+      timeout: timeoutMs,
+    })) as OpenAiDiarizedResponse;
 
     const totalMs = Date.now() - chunkStart;
     perChunk.push({
@@ -111,13 +116,17 @@ export const transcribeWithDiarization = async (
         text: segment.text.trim(),
       });
     }
+
+    console.log(`[transcribe] Finished chunk ${chunkNum} of ${totalChunks} (${totalMs}ms)`);
+    onProgress?.(chunk.chunkIndex + 1, totalChunks);
   }
 
   const stitchingStart = Date.now();
   const speakerText = mergedSegments.map(segmentToLine).join("\n");
+  // When speaker segments exist, include speaker names in the main transcript
   const text =
     speakerText.length > 0
-      ? mergedSegments.map((segment) => segment.text).join(" ")
+      ? speakerText
       : rawTextParts.join(" ");
   const stitchingMs = Date.now() - stitchingStart;
 

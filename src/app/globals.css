@@ -19,6 +19,7 @@
 body {
   color: rgb(var(--foreground-rgb));
   background: #09090b;
+  min-height: 100vh;
 }
 
 @keyframes shimmer {

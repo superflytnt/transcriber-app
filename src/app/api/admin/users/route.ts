@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isAdmin, listUsers } from "@/lib/admin-store";
+import { addUser, isAdmin, listUsers } from "@/lib/admin-store";
 import { getCurrentUser } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -14,6 +14,7 @@ async function requireAdmin(request: Request): Promise<{ email: string } | NextR
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const auth = await requireAdmin(request);
   if (auth instanceof NextResponse) return auth;
+  await addUser(auth.email);
   const searchParams = request.nextUrl.searchParams;
   const page = Math.max(1, Number(searchParams.get("page")) || 1);
   const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit")) || 25));

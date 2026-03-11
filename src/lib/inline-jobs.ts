@@ -28,7 +28,9 @@ async function ensureDir(): Promise<void> {
 export async function setInlineJob(jobId: string, job: InlineJob): Promise<void> {
   await ensureDir();
   const p = jobPath(jobId);
-  await fs.writeFile(p, JSON.stringify(job), "utf-8");
+  const tmp = p + ".tmp";
+  await fs.writeFile(tmp, JSON.stringify(job), "utf-8");
+  await fs.rename(tmp, p);
 }
 
 export async function getInlineJob(jobId: string): Promise<InlineJob | undefined> {
@@ -56,6 +58,6 @@ export async function setInlineJobState(
   const job = await getInlineJob(jobId);
   if (!job) return;
   Object.assign(job, update);
-  if (update.state) job.progress = undefined;
+  if (update.state === "completed" || update.state === "failed") job.progress = undefined;
   await setInlineJob(jobId, job);
 }

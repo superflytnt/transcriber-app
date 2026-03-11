@@ -16,6 +16,7 @@ type TranscriptListItem = {
   bottleneck?: string;
   createdAt: string;
   downloadUrl: string;
+  speakers?: string[];
 };
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -57,7 +58,28 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         endToEndMs: number;
         bottleneck?: string;
         createdAt: string;
+        speakers?: string[];
       };
+
+      let speakers = data.speakers;
+      if (!speakers || speakers.length === 0) {
+        const txtPath = path.join(saveDir, name.replace(/\.json$/, ".txt"));
+        try {
+          const txt = await fs.readFile(txtPath, "utf-8");
+          const bySpeaker = txt.split("\n\n--- By speaker ---\n\n")[1] ?? "";
+          speakers = Array.from(
+            new Set(
+              bySpeaker
+                .split(/\r?\n/)
+                .map((line) => { const i = line.indexOf(": "); return i > 0 ? line.slice(0, i) : ""; })
+                .filter(Boolean)
+            )
+          ).sort();
+        } catch {
+          speakers = [];
+        }
+      }
+
       list.push({
         id: data.id,
         originalFileName: data.originalFileName,
@@ -66,6 +88,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         bottleneck: data.bottleneck,
         createdAt: data.createdAt,
         downloadUrl: `/api/transcripts/${encodeURIComponent(data.id)}`,
+        speakers,
       });
     } catch {
       // skip invalid or unreadable json

@@ -14,6 +14,6 @@ You **must** satisfy all of the following before presenting any fix or feature t
    - You have exercised the **same path** the user will (e.g. open app in browser at http://localhost:3000, sign in if needed, do the action—e.g. upload a file—see the result in the UI). Curl, "process didn't crash," or code logic alone do **not** count. (See `verify-same-as-user.mdc`.)
 
 3. **Proof**
-   - You have seen the relevant screen yourself (browser snapshot/screenshot). You do not claim done without having run the app and the flow and captured that.
+   - You have seen the relevant screen yourself (browser snapshot/screenshot). You do not claim done without having run the app and the flow and captured that. Screenshots are the best evidence; see `verify-with-evidence.mdc`.
 
 If you have not done 1–3, do **not** say it works, it's done, or "I tested it." Do the work first, then report.

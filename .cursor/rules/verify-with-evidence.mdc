@@ -1,0 +1,23 @@
+---
+description: Verify with actual evidence that you've tested; screenshots are the best proof (not the only).
+alwaysApply: true
+---
+
+# Verify with actual evidence
+
+You must have **actual evidence** that you tested before claiming something works or is done. Assertions without evidence are not enough.
+
+## Best: screenshots
+
+- **Screenshots are the best way** to prove you ran the app and saw the result. Take a browser screenshot (or snapshot) of the relevant screen after exercising the flow (e.g. upload, then screenshot showing Done or the result).
+- Prefer a screenshot that shows the **outcome** the user cares about (e.g. "Done", "Processed in Xs", transcript visible, or the specific feature working).
+
+## Other valid evidence
+
+- Browser snapshot of the page state after the flow.
+- Log output or test run output that shows the flow completed (e.g. e2e test passed with a clear pass message). This is evidence but screenshots are stronger.
+- For non-UI work: logs, test output, or reproducible steps that show the change behaved as intended.
+
+## Rule
+
+Do not say you tested or that it works without being able to point to **evidence** (ideally a screenshot). Screenshots are not the only way to verify, but they are the best. When in doubt, capture one.

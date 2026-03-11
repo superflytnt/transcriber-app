@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import path from "node:path";
 import { env } from "./env";
 import { ensureOpenAIFormat } from "./audio-normalize";
 import {
@@ -51,6 +52,13 @@ export async function runTranscriptionJob(
   await fs.unlink(data.filePath).catch(() => undefined);
   for (const p of deleteAfter) {
     await fs.unlink(p).catch(() => undefined);
+  }
+  // Clean up chunk directories left by chunker
+  const chunkDirs = await fs.readdir(env.uploadDir).catch(() => [] as string[]);
+  for (const name of chunkDirs) {
+    if (name.startsWith("chunks-")) {
+      await fs.rm(path.join(env.uploadDir, name), { recursive: true, force: true }).catch(() => undefined);
+    }
   }
 
   const jobFinishedAt = Date.now();
