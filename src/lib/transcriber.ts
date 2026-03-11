@@ -10,6 +10,13 @@ import type {
   TranscriptionJobResult,
 } from "./queue";
 
+/** Node 18 lacks global File; OpenAI SDK requires it for file uploads. */
+async function ensureFileGlobal(): Promise<void> {
+  if (typeof globalThis.File !== "undefined") return;
+  const { File } = await import("node:buffer");
+  (globalThis as unknown as { File: typeof File }).File = File;
+}
+
 function getClient(): OpenAI {
   if (!env.openAiApiKey) {
     throw new Error("OPENAI_API_KEY is required.");
@@ -45,6 +52,7 @@ export const transcribeWithDiarization = async (
   knownSpeakerNames?: string[],
   onProgress?: TranscribeProgressCallback
 ): Promise<TranscriptionJobResult> => {
+  await ensureFileGlobal();
   const chunkingStart = Date.now();
   const chunks = await createChunks(filePath, env.uploadDir, env.chunkTargetMb);
   const chunkingMs = Date.now() - chunkingStart;

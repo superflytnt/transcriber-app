@@ -135,7 +135,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         timings: result.timings,
       },
     });
-  } catch {
+  } catch (err) {
+    console.error("[POST /api/jobs]", err instanceof Error ? err.message : err);
     return NextResponse.json(
       { error: "Something went wrong. Please try again in a moment." },
       { status: 500 }
