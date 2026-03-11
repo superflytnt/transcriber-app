@@ -718,8 +718,8 @@ export default function Home() {
               />
             </div>
 
-            {/* Rename speakers - only when multiple speakers */}
-            {speakerLabels.length >= 2 && (
+            {/* Rename speakers - show whenever there are speaker labels (A, B, C, …) */}
+            {speakerLabels.length >= 1 && (
               <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-4">
                 <h3 className="mb-3 text-sm font-semibold text-zinc-300">Rename speakers</h3>
                 <p className="mb-3 text-xs text-zinc-500">
