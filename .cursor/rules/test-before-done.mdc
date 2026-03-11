@@ -1,5 +1,5 @@
 ---
-description: Test new feature enhancements thoroughly before claiming work is done.
+description: Test every feature in the browser before claiming done; see what the user sees and fix problems.
 alwaysApply: true
 ---
 
@@ -7,7 +7,7 @@ alwaysApply: true
 
 ## Rule
 
-Do **not** tell the user a feature enhancement is done until you have **run verification** and it **passed**. "I've implemented X" is not enough—you must show that it works.
+Do **not** say a feature is done until you have **verified it** and it **works**. Use the browser and every tool available to see what the user sees. If you see a problem, fix it. Do not report done with broken or untested behavior.
 
 ## Required before claiming "done"
 
@@ -16,14 +16,16 @@ Do **not** tell the user a feature enhancement is done until you have **run veri
 
 2. **Automated tests**
    - Run `npm run test:e2e` (Playwright). If any test fails, fix the cause or update the test, then re-run until they pass.
-   - For API/upload-related changes, run `npm run test:api` as well (requires dev server on port 3000; start it if needed per env-and-deploy rule).
+   - For API/upload-related changes, run `npm run test:api` as well (dev server on port 3000; start it if needed per env-and-deploy rule).
 
-3. **Feature-specific verification**
-   - If the change is user-facing (new UI, new flow, upload, transcripts, etc.): run the relevant e2e test(s) that cover that path, or run a quick manual check (e.g. curl to the API, or run the one Playwright test that hits that flow). Do not assume it works without running it.
+3. **Use the browser**
+   - For user-facing work: start the dev server if needed, then use the browser (navigate to the app, take a snapshot, click through the flow). Actually load the page and verify the UI and the feature. See what the user would see.
+   - If the browser shows a problem (stuck on Loading, broken form, wrong state), fix it. Do not say "done" and leave the user with a broken experience.
+   - Use all tools at your disposal: browser_navigate, browser_snapshot, browser_click, browser_fill, etc., plus build and e2e. Verification is not optional.
 
 4. **Only then**
-   - After build succeeds and the applicable tests pass (and any feature-specific check passes), you may say the work is done. If something fails, fix it and re-run; do not hand off failures to the user.
+   - After build passes, tests pass, and the feature has been verified in the browser (or equivalent for non-UI work), you may say the work is done. If anything fails or looks wrong, fix it and re-verify. Do not hand off failures to the user.
 
 ## Summary
 
-- Build must pass. E2e (and test:api when relevant) must pass. For new or changed features, explicitly verify the happy path. No "done" until verification succeeds.
+- Build must pass. Tests must pass. For user-facing features, use the browser to verify the flow and fix what's broken. No "done" until you've seen it work.

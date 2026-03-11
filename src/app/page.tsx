@@ -113,7 +113,10 @@ function LoginUI({
 
   const handleSendLink = useCallback(async () => {
     const e = email.trim();
-    if (!e) return;
+    if (!e) {
+      setSendError("Please enter your email.");
+      return;
+    }
     setSendError(null);
     setSending(true);
     try {
@@ -192,7 +195,7 @@ function LoginUI({
           <button
             type="button"
             onClick={handleSendLink}
-            disabled={sending || !email.trim()}
+            disabled={sending}
             className="mt-4 w-full rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {sending ? "Sending…" : "Send login link"}
@@ -248,7 +251,7 @@ function LoginUI({
 }
 
 export default function Home() {
-  const [session, setSession] = useState<SessionState>("loading");
+  const [session, setSession] = useState<SessionState>(null);
   const [file, setFile] = useState<File | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [languageHint, setLanguageHint] = useState("");
@@ -321,16 +324,21 @@ export default function Home() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/auth/session", { credentials: "include" })
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 5000);
+    fetch("/api/auth/session", { credentials: "include", signal: controller.signal })
       .then((res) => (cancelled ? undefined : res.ok ? res.json() : null))
       .then((data) => {
         if (cancelled) return;
-        setSession(data?.email ? { email: data.email } : null);
+        if (data?.email) setSession({ email: data.email });
       })
-      .catch(() => {
-        if (!cancelled) setSession(null);
-      });
-    return () => { cancelled = true; };
+      .catch(() => {})
+      .finally(() => clearTimeout(t));
+    return () => {
+      cancelled = true;
+      controller.abort();
+      clearTimeout(t);
+    };
   }, []);
 
   const handleLogout = useCallback(async () => {
@@ -345,7 +353,7 @@ export default function Home() {
   }, [copiedWhich]);
 
   const fetchSavedTranscripts = useCallback(async () => {
-    if (session === null || session === "loading") return;
+    if (!session || typeof session === "string") return;
     setTranscriptsLoadError(null);
     try {
       const res = await fetch("/api/transcripts", { credentials: "include" });
@@ -364,7 +372,7 @@ export default function Home() {
   }, [session]);
 
   useEffect(() => {
-    if (session && session !== "loading") fetchSavedTranscripts();
+    if (session && typeof session === "object") fetchSavedTranscripts();
   }, [session, fetchSavedTranscripts]);
 
   useEffect(() => {
@@ -586,16 +594,7 @@ export default function Home() {
             : `Transcribing…${progressSuffix}`
           : "";
 
-  if (session === "loading") {
-    return (
-      <main className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col items-center justify-center">
-        <div className="h-10 w-10 animate-spin rounded-full border-2 border-zinc-500 border-t-emerald-400" />
-        <p className="mt-4 text-zinc-400">Loading…</p>
-      </main>
-    );
-  }
-
-  if (session === null) {
+  if (!session || typeof session !== "object") {
     return <LoginUI onSession={(email) => setSession({ email })} initialStep="email" initialEmail="" />;
   }
 
