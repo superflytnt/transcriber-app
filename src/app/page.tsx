@@ -213,9 +213,16 @@ export default function Home() {
         form.append("knownSpeakerNames", knownSpeakers);
 
         const response = await fetch("/api/jobs", { method: "POST", body: form });
+        const contentType = response.headers.get("content-type") ?? "";
+        const raw = await response.text();
         let data: { jobId?: string; error?: string };
         try {
-          data = await response.json();
+          if (!contentType.includes("application/json")) {
+            const preview = raw.slice(0, 150);
+            setError(`Invalid response from server (${response.status}). Try again.${preview ? ` Response: ${preview}…` : ""}`);
+            return;
+          }
+          data = JSON.parse(raw) as { jobId?: string; error?: string };
         } catch {
           setError("Invalid response from server. Try again.");
           return;
@@ -240,7 +247,13 @@ export default function Home() {
           // ignore
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Upload failed. Check the network and try again.");
+        const msg = err instanceof Error ? err.message : "Upload failed. Check the network and try again.";
+        const isTimeout = /timeout|timed out|504/i.test(msg);
+        setError(
+          isTimeout
+            ? "Upload timed out. Large files (e.g. 30MB+) can take several minutes. Try again; the server now allows longer uploads."
+            : msg
+        );
       } finally {
         setIsUploading(false);
       }
@@ -436,6 +449,7 @@ export default function Home() {
                   {isDragOver ? "Drop to start" : "Drop your audio here"}
                 </p>
                 <p className="text-sm text-zinc-500">or click to choose a file · starts automatically</p>
+                <p className="text-xs text-zinc-600 mt-1">Supported: m4a, mp3, wav, aac, webm, qta, flac, ogg, mp4, mpeg, mpga, mov</p>
               </>
             )}
           </div>
@@ -697,7 +711,7 @@ export default function Home() {
         <section className="mt-10 border-t border-zinc-800 pt-8">
           <h2 className="mb-3 text-lg font-semibold text-zinc-200">Saved transcripts</h2>
           <p className="mb-4 text-sm text-zinc-500">
-            Each completed job is saved to the server and listed here. No env vars are required — use 1 replica on Railway so the list and downloads work.
+            Each completed job is saved and listed here. You can download any transcript from this list.
           </p>
           {transcriptsLoadError && (
             <div className="mb-4 rounded-xl border border-amber-700 bg-amber-950/40 px-4 py-3 text-sm text-amber-200">
@@ -715,7 +729,7 @@ export default function Home() {
             <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-6 text-center text-sm text-zinc-500">
               <p>No saved transcripts yet. Complete a transcription to see it here.</p>
               <p className="mt-2 text-xs text-zinc-600">
-                Only successfully completed jobs appear. If you just finished one and don&apos;t see it, use 1 replica on Railway and check for errors above or in Railway logs.
+                Only successfully completed jobs appear. If you just finished one and don&apos;t see it, wait a moment and refresh, or check for an error message above.
               </p>
             </div>
           ) : savedTranscripts.length > 0 ? (

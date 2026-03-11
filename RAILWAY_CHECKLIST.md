@@ -24,6 +24,12 @@ Double-checked so tomorrow you can open the site, drop a file, and have it work.
 4. **Worker** – Checks that the uploaded file exists (clear error if missing, e.g. multi-replica). Converts to an OpenAI-accepted format if needed, transcribes, saves transcript + stats to `uploadDir/transcripts`, returns result.
 5. **Frontend** – On `state: "completed"` shows transcript and timings; on `state: "failed"` shows the server error message in a visible error box.
 
+## Large uploads (e.g. 30MB, 1 hour)
+
+- **Body size:** `next.config.mjs` sets `serverActions.bodySizeLimit: "250mb"` so large files are accepted.
+- **Request duration:** `POST /api/jobs` exports `maxDuration = 300` (5 min) so the upload request is not killed while receiving the file. Railway allows up to 15 min at the platform level.
+- If you still see “Request timed out,” retry; the first attempt may have hit a previous limit. The UI shows a clearer message for timeout errors.
+
 ## Bugs fixed in this pass
 
 - **Polling:** Non-OK responses (404, 500) and JSON parse failures now set an error and stop polling instead of hanging.

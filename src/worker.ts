@@ -31,7 +31,8 @@ const start = async (): Promise<void> => {
       } catch (err) {
         const code = (err as NodeJS.ErrnoException)?.code;
         if (code === "ENOENT") {
-          throw new Error("Uploaded file not found. If the app runs on multiple servers, use 1 replica so upload and worker share the same disk.");
+          console.warn("Uploaded file not found (ENOENT). If the app runs on multiple servers, use 1 replica so upload and worker share the same disk.");
+          throw new Error("The uploaded file could not be found. Please try uploading again.");
         }
         throw err;
       }

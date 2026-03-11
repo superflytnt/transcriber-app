@@ -9,6 +9,9 @@ import { getTranscriptionQueue } from "@/lib/queue";
 
 export const runtime = "nodejs";
 
+/** Allow long-running uploads (e.g. 30MB+ / hour-long files) so the request is not killed. */
+export const maxDuration = 300;
+
 const ALLOWED_EXTENSIONS = [
   ".m4a",
   ".mp3",
