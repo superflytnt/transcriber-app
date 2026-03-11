@@ -55,11 +55,18 @@ function isFileLike(
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  let uploadPath: string | null = null;
   try {
+    if (request.signal.aborted) {
+      return NextResponse.json({ error: "Request was cancelled." }, { status: 499 });
+    }
     const uploadStartedAt = Date.now();
     await ensureDirectory(env.uploadDir);
 
     const formData = await request.formData();
+    if (request.signal.aborted) {
+      return NextResponse.json({ error: "Request was cancelled." }, { status: 499 });
+    }
     const fileValue = formData.get("file");
     if (!isFileLike(fileValue)) {
       return NextResponse.json({ error: "No file uploaded." }, { status: 400 });
@@ -103,9 +110,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const uploadPath = safeUploadPath(env.uploadDir, fileValue.name);
+    uploadPath = safeUploadPath(env.uploadDir, fileValue.name);
     const writeStream = fs.createWriteStream(uploadPath);
-    await pipeline(Readable.fromWeb(fileValue.stream() as never), writeStream);
+    await pipeline(Readable.fromWeb(fileValue.stream() as never), writeStream, {
+      signal: request.signal,
+    });
+    if (request.signal.aborted) {
+      await fs.unlink(uploadPath).catch(() => undefined);
+      return NextResponse.json({ error: "Request was cancelled." }, { status: 499 });
+    }
     const uploadFinishedAt = Date.now();
 
     const languageHint = String(formData.get("languageHint") ?? "").trim() || undefined;
@@ -140,6 +153,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ jobId: job.id });
     }
 
+    if (request.signal.aborted) {
+      await fs.unlink(uploadPath).catch(() => undefined);
+      return NextResponse.json({ error: "Request was cancelled." }, { status: 499 });
+    }
     const result = await runTranscriptionJob(jobData);
     const jobId = `inline-${uuidv4()}`;
     return NextResponse.json({
@@ -152,6 +169,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       },
     });
   } catch (err) {
+    if (uploadPath) {
+      await fs.unlink(uploadPath).catch(() => undefined);
+    }
+    const isAbort = err instanceof Error && err.name === "AbortError";
+    if (isAbort) {
+      return NextResponse.json({ error: "Request was cancelled." }, { status: 499 });
+    }
     console.error("[POST /api/jobs]", err instanceof Error ? err.message : err);
     if (err instanceof Error && err.stack) console.error(err.stack);
     return NextResponse.json(
