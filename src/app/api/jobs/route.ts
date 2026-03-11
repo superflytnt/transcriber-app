@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from "uuid";
 import { env } from "@/lib/env";
 import { bytesToMb, ensureDirectory, safeUploadPath } from "@/lib/files";
 import { getTranscriptionQueue } from "@/lib/queue";
+import { runTranscriptionJob } from "@/lib/run-transcription";
 
 export const runtime = "nodejs";
 
@@ -101,28 +102,39 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             .filter(Boolean)
         : undefined;
 
-    const queue = getTranscriptionQueue();
-    const job = await queue.add(
-      "transcribe",
-      {
-        filePath: uploadPath,
-        originalFileName: fileValue.name,
-        mimeType: fileValue.type,
-        languageHint,
-        knownSpeakerNames,
-        uploadStartedAt,
-        uploadFinishedAt,
-      },
-      {
+    const jobData = {
+      filePath: uploadPath,
+      originalFileName: fileValue.name,
+      mimeType: fileValue.type,
+      languageHint,
+      knownSpeakerNames,
+      uploadStartedAt,
+      uploadFinishedAt,
+    };
+
+    if (env.redisUrl) {
+      const queue = getTranscriptionQueue();
+      const job = await queue.add("transcribe", jobData, {
         jobId: uuidv4(),
         removeOnComplete: 20,
         removeOnFail: 20,
         attempts: 2,
         backoff: { type: "exponential", delay: 5000 },
-      }
-    );
+      });
+      return NextResponse.json({ jobId: job.id });
+    }
 
-    return NextResponse.json({ jobId: job.id });
+    const result = await runTranscriptionJob(jobData);
+    const jobId = `inline-${uuidv4()}`;
+    return NextResponse.json({
+      jobId,
+      state: "completed",
+      result: {
+        text: result.text,
+        speakerText: result.speakerText,
+        timings: result.timings,
+      },
+    });
   } catch {
     return NextResponse.json(
       { error: "Something went wrong. Please try again in a moment." },

@@ -10,11 +10,12 @@ import type {
   TranscriptionJobResult,
 } from "./queue";
 
-if (!env.openAiApiKey) {
-  throw new Error("OPENAI_API_KEY is required.");
+function getClient(): OpenAI {
+  if (!env.openAiApiKey) {
+    throw new Error("OPENAI_API_KEY is required.");
+  }
+  return new OpenAI({ apiKey: env.openAiApiKey });
 }
-
-const client = new OpenAI({ apiKey: env.openAiApiKey });
 
 type OpenAiDiarizedResponse = {
   text?: string;
@@ -78,7 +79,7 @@ export const transcribeWithDiarization = async (
       requestPayload.known_speaker_names = knownSpeakerNames;
     }
 
-    const response = (await client.audio.transcriptions.create(
+    const response = (await getClient().audio.transcriptions.create(
       requestPayload as never
     )) as OpenAiDiarizedResponse;
 

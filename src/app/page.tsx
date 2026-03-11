@@ -256,13 +256,13 @@ export default function Home() {
         const response = await fetch("/api/jobs", { method: "POST", body: form });
         const contentType = response.headers.get("content-type") ?? "";
         const raw = await response.text();
-        let data: { jobId?: string; error?: string };
+        let data: { jobId?: string; error?: string; state?: JobState; result?: JobResponse["result"] };
         try {
           if (!contentType.includes("application/json")) {
             setError("Something went wrong. Please try again.");
             return;
           }
-          data = JSON.parse(raw) as { jobId?: string; error?: string };
+          data = JSON.parse(raw) as typeof data;
         } catch {
           setError("Something went wrong. Please try again.");
           return;
@@ -278,14 +278,24 @@ export default function Home() {
         }
         const id = data.jobId as string;
         setJobId(id);
-        setJobState("waiting");
-        setJobProgress(null);
         setJobFileName(audioFile.name);
         try {
           localStorage.setItem(STORAGE_KEY, JSON.stringify({ jobId: id, fileName: audioFile.name }));
         } catch {
           // ignore
         }
+        if (data.state === "completed" && data.result) {
+          setJobState("completed");
+          setJobProgress(null);
+          setText(data.result.text);
+          setOriginalSpeakerText(data.result.speakerText);
+          setSpeakerText(data.result.speakerText);
+          setSpeakerRenames({});
+          setTimings(data.result.timings ?? null);
+          return;
+        }
+        setJobState("waiting");
+        setJobProgress(null);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "";
         const isTimeout = /timeout|timed out|504/i.test(msg);
