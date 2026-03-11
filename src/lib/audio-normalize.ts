@@ -1,11 +1,33 @@
 import fs from "node:fs/promises";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import ffmpegPath from "ffmpeg-static";
 import ffprobePath from "ffprobe-static";
 import ffmpeg from "fluent-ffmpeg";
 
-ffmpeg.setFfmpegPath(ffmpegPath ?? "");
-ffmpeg.setFfprobePath(ffprobePath.path);
+function resolveFfmpeg(): string {
+  const p = (ffmpegPath as string) ?? "";
+  const fromCwd = path.join(process.cwd(), "node_modules", "ffmpeg-static", "ffmpeg");
+  if (p && existsSync(p)) return p;
+  return fromCwd;
+}
+function resolveFfprobe(): string {
+  const p = ffprobePath.path ?? "";
+  const fromCwd = path.join(
+    process.cwd(),
+    "node_modules",
+    "ffprobe-static",
+    "bin",
+    process.platform,
+    process.arch,
+    process.platform === "win32" ? "ffprobe.exe" : "ffprobe"
+  );
+  if (p && existsSync(p)) return p;
+  return fromCwd;
+}
+
+ffmpeg.setFfmpegPath(resolveFfmpeg());
+ffmpeg.setFfprobePath(resolveFfprobe());
 
 /** Extensions OpenAI transcription API accepts (no conversion needed). */
 const OPENAI_ACCEPTED_EXTENSIONS = [
@@ -47,7 +69,7 @@ export async function ensureOpenAIFormat(
 
   await new Promise<void>((resolve, reject) => {
     ffmpeg(inputPath)
-      .outputOptions(["-c:a aac", "-b:a 128k"])
+      .outputOptions(["-vn", "-c:a aac", "-b:a 128k"])
       .output(outputPath)
       .on("end", () => resolve())
       .on("error", (err: Error) => reject(err))

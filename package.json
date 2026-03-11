@@ -17,6 +17,7 @@
     "worker:dev": "tsx watch src/worker.ts"
   },
   "dependencies": {
+    "tsx": "^4.21.0",
     "bullmq": "^5.70.4",
     "docx": "^9.6.1",
     "ffmpeg-static": "^5.3.0",
@@ -39,7 +40,6 @@
     "playwright": "^1.58.2",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
-    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }

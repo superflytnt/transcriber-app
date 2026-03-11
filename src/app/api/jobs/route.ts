@@ -38,6 +38,22 @@ function isAllowedFile(name: string): boolean {
   return ALLOWED_EXTENSIONS.includes(getExtension(name));
 }
 
+/** File-like (works in Node 18 where global File may be undefined). */
+function isFileLike(
+  v: unknown
+): v is { name: string; size: number; type: string; stream: () => ReadableStream } {
+  return (
+    v != null &&
+    typeof v === "object" &&
+    "name" in v &&
+    typeof (v as { name: unknown }).name === "string" &&
+    "size" in v &&
+    typeof (v as { size: unknown }).size === "number" &&
+    "stream" in v &&
+    typeof (v as { stream: unknown }).stream === "function"
+  );
+}
+
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const uploadStartedAt = Date.now();
@@ -45,7 +61,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const formData = await request.formData();
     const fileValue = formData.get("file");
-    if (!(fileValue instanceof File)) {
+    if (!isFileLike(fileValue)) {
       return NextResponse.json({ error: "No file uploaded." }, { status: 400 });
     }
 
@@ -137,6 +153,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     });
   } catch (err) {
     console.error("[POST /api/jobs]", err instanceof Error ? err.message : err);
+    if (err instanceof Error && err.stack) console.error(err.stack);
     return NextResponse.json(
       { error: "Something went wrong. Please try again in a moment." },
       { status: 500 }

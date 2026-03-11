@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import ffmpegPath from "ffmpeg-static";
 import ffprobePath from "ffprobe-static";
@@ -15,8 +16,27 @@ export type AudioChunk = {
   startSeconds: number;
 };
 
-ffmpeg.setFfmpegPath(ffmpegPath ?? "");
-ffmpeg.setFfprobePath(ffprobePath.path);
+function resolveFfmpeg(): string {
+  const p = (ffmpegPath as string) ?? "";
+  const fromCwd = path.join(process.cwd(), "node_modules", "ffmpeg-static", "ffmpeg");
+  return p && existsSync(p) ? p : fromCwd;
+}
+function resolveFfprobe(): string {
+  const p = ffprobePath.path ?? "";
+  const fromCwd = path.join(
+    process.cwd(),
+    "node_modules",
+    "ffprobe-static",
+    "bin",
+    process.platform,
+    process.arch,
+    process.platform === "win32" ? "ffprobe.exe" : "ffprobe"
+  );
+  return p && existsSync(p) ? p : fromCwd;
+}
+
+ffmpeg.setFfmpegPath(resolveFfmpeg());
+ffmpeg.setFfprobePath(resolveFfprobe());
 
 const getAudioInfo = async (inputPath: string): Promise<AudioInfo> => {
   const stats = await fs.stat(inputPath);

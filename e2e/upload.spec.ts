@@ -29,4 +29,14 @@ test.describe("Transcriber upload", () => {
       content?.includes("Error");
     expect(hasSensibleState).toBeTruthy();
   });
+
+  test("uploading .qta file completes without generic error", async ({ page }) => {
+    test.setTimeout(60000);
+    await page.goto("/");
+    const qtaPath = path.join(__dirname, "../../samples/7833 Whiterim Terr.qta");
+    await page.getByLabel("Choose audio file").setInputFiles(qtaPath);
+    const errorBox = page.getByText("Something went wrong. Please try again in a moment.");
+    await page.waitForTimeout(3000);
+    await expect(errorBox).not.toBeVisible({ timeout: 45000 });
+  });
 });
