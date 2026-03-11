@@ -9,11 +9,16 @@ Double-checked so tomorrow you can open the site, drop a file, and have it work.
    - `OPENAI_API_KEY` – Required for transcription.
    - Optional: `UPLOAD_DIR` (default `/tmp/transcriber-uploads`), `CHUNK_TARGET_MB` (20), `MAX_UPLOAD_MB` (200).
 
-2. **Single replica (recommended)**
+2. **Persist “Saved transcripts” (Railway Volume)**
+   - By default, uploads and saved transcripts are written to the container filesystem, which is **ephemeral**: it’s wiped on every deploy or restart. That’s why the “Saved transcripts” list is empty on Railway after a deploy.
+   - To keep transcripts across deploys: add a **Volume** to your service in Railway, mount it at a path (e.g. `/data`), then set **`UPLOAD_DIR`** to that path (e.g. `UPLOAD_DIR=/data/transcriber-uploads`). The app will store uploads and transcripts under that directory, and the volume will persist.
+   - Steps: Railway → your service → **Variables** → add Volume (or in the Volumes tab) → set mount path to `/data` → add variable `UPLOAD_DIR=/data/transcriber-uploads`. Redeploy so the new volume is used.
+
+3. **Single replica (recommended)**
    - So the same container that receives the upload also runs the worker and serves “Saved transcripts.”
    - With multiple replicas, uploads and workers can be on different containers, so jobs can fail with “Uploaded file not found” and the saved list can stay empty.
 
-3. **Start command**
+4. **Start command**
    - Use `node scripts/start.mjs` (or `npm run start`) so both web and worker run in the same process tree and share the same filesystem.
 
 ## What happens when you drop a file
