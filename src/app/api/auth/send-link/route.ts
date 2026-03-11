@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { env } from "@/lib/env";
 import { createLoginToken } from "@/lib/auth-store";
 import { sendLoginEmail } from "@/lib/email";
 
@@ -10,6 +11,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const email = typeof body.email === "string" ? body.email.trim() : "";
     if (!email) {
       return NextResponse.json({ error: "Email is required." }, { status: 400 });
+    }
+    if (!env.resendApiKey) {
+      return NextResponse.json(
+        {
+          error: "Email is not configured on this server. Sign-in links cannot be sent.",
+          code: "EMAIL_NOT_CONFIGURED",
+        },
+        { status: 503 }
+      );
     }
     const result = await createLoginToken(email);
     if ("error" in result) {

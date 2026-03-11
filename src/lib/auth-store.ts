@@ -2,8 +2,8 @@ import crypto from "node:crypto";
 import { env } from "./env";
 
 const LOGIN_TTL_SEC = 60 * 15; // 15 minutes
-const RATE_LIMIT_WINDOW_SEC = 60;
-const RATE_LIMIT_MAX_PER_EMAIL = 3;
+const RATE_LIMIT_WINDOW_SEC = 60 * 5;
+const RATE_LIMIT_MAX_PER_EMAIL = 10;
 
 type StoredLogin = { email: string; expiresAt: number };
 
@@ -66,18 +66,21 @@ function memoryDel(key: string): void {
 async function storeSet(key: string, value: string, ttlSec: number): Promise<void> {
   const r = await getRedis();
   if (r) await redisSet(key, value, ttlSec);
+  else if (env.redisUrl) throw new Error("Redis unavailable");
   else memorySet(key, value, ttlSec);
 }
 
 async function storeGet(key: string): Promise<string | null> {
   const r = await getRedis();
   if (r) return redisGet(key);
+  if (env.redisUrl) throw new Error("Redis unavailable");
   return memoryGet(key);
 }
 
 async function storeDel(key: string): Promise<void> {
   const r = await getRedis();
   if (r) await redisDel(key);
+  else if (env.redisUrl) throw new Error("Redis unavailable");
   else memoryDel(key);
 }
 

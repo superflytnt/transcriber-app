@@ -110,6 +110,36 @@ function LoginUI({
   const [codeError, setCodeError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [showDevSignIn, setShowDevSignIn] = useState(false);
+  const [devSigningIn, setDevSigningIn] = useState(false);
+
+  const handleDevSignIn = useCallback(async () => {
+    const e = email.trim();
+    if (!e) {
+      setSendError("Please enter your email.");
+      return;
+    }
+    setSendError(null);
+    setDevSigningIn(true);
+    try {
+      const res = await fetch("/api/auth/dev-sign-in", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: e }),
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && typeof data.email === "string") {
+        onSession(data.email);
+      } else {
+        setSendError((data.error as string) || "Sign-in failed.");
+      }
+    } catch {
+      setSendError("Something went wrong.");
+    } finally {
+      setDevSigningIn(false);
+    }
+  }, [email, onSession]);
 
   const handleSendLink = useCallback(async () => {
     const e = email.trim();
@@ -130,7 +160,10 @@ function LoginUI({
         setPendingEmail(e);
         setStep("check-email");
       } else {
-        setSendError((data.error as string) || "Failed to send. Try again.");
+        const msg = (data.error as string) || "Failed to send. Try again.";
+        const isNotConfigured = res.status === 503 || (data.code as string) === "EMAIL_NOT_CONFIGURED" || /not configured/i.test(msg);
+        setSendError(isNotConfigured ? "This server can't send email yet." : msg);
+        if (isNotConfigured) setShowDevSignIn(true);
       }
     } catch {
       setSendError("Something went wrong. Try again.");
@@ -164,12 +197,6 @@ function LoginUI({
     }
   }, [code, onSession]);
 
-  useEffect(() => {
-    if (code.replace(/\s/g, "").length === 6) {
-      handleVerifyCode();
-    }
-  }, [code, handleVerifyCode]);
-
   if (step === "email") {
     return (
       <main className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col items-center justify-center px-4">
@@ -200,6 +227,16 @@ function LoginUI({
           >
             {sending ? "Sending…" : "Send login link"}
           </button>
+          {showDevSignIn && (
+            <button
+              type="button"
+              onClick={handleDevSignIn}
+              disabled={devSigningIn}
+              className="mt-3 w-full rounded-lg border border-zinc-600 px-4 py-2.5 text-sm font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+            >
+              {devSigningIn ? "Signing in…" : "Sign in without email (development)"}
+            </button>
+          )}
         </div>
       </main>
     );
@@ -602,20 +639,9 @@ export default function Home() {
     <main className="min-h-screen bg-zinc-950 text-zinc-100">
       <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-10">
         <header className="mb-8 rounded-2xl border border-zinc-800 bg-gradient-to-b from-zinc-900/80 to-zinc-900/40 px-6 py-8 text-center shadow-lg">
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
-              Transcriber
-            </h1>
-            <span className="text-sm text-zinc-500">·</span>
-            <span className="text-sm text-zinc-400">Signed in as {session.email}</span>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="rounded-lg border border-zinc-600 px-3 py-1.5 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300"
-            >
-              Sign out
-            </button>
-          </div>
+          <h1 className="m-0 text-3xl font-bold leading-tight tracking-tight text-white sm:text-4xl">
+            Transcriber
+          </h1>
           <p className="mt-2 text-zinc-400">
             Drop audio. We&apos;ll transcribe it.
           </p>
@@ -1204,6 +1230,18 @@ export default function Home() {
             </ul>
           ) : null}
         </section>
+
+        {/* Account - bottom of page */}
+        <footer className="mt-10 border-t border-zinc-800 pt-8 flex flex-col items-center gap-2 text-center">
+          <span className="text-sm text-zinc-400">Signed in as {session.email}</span>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="rounded-lg border border-zinc-600 px-3 py-1.5 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300"
+          >
+            Sign out
+          </button>
+        </footer>
       </div>
 
     </main>
