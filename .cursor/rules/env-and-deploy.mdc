@@ -1,0 +1,22 @@
+---
+description: Keep local dev and Railway running; prevent and fix environment/deploy issues so the user can focus on features.
+alwaysApply: true
+---
+
+# Local dev and Railway: keep it running
+
+## When building, testing, or changing the app
+
+1. **Local URL (http://localhost:3000/)**
+   - Before running e2e tests, Playwright, or when the user says the page won't load: check if something is listening on port 3000 (`lsof -ti :3000` or `curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/`). If not, start the dev server: `npm run dev` (from `transcriber-app`). The dev script already kills port 3000 and binds to it.
+   - Do not tell the user to "start the server" or "refresh"—start it yourself when it's missing.
+
+2. **Stale/corrupted dev build (blank page, 500 on GET /)**
+   - If logs show `Cannot find module './XXX.js'` (webpack chunk missing) or GET / returns 500 with no obvious code bug: clear the cache and restart. Run `rm -rf .next` then start `npm run dev` again. Do this without being asked when you see those symptoms.
+
+3. **Railway**
+   - After pushing to `main` or when the user mentions deploy/Railway/transcriber2: check deployment health. Use `railway logs --build --lines 100` and/or `railway logs --lines 80` (from `transcriber-app` with Railway linked). If the build failed, fix the cause (e.g. TypeScript/build errors, missing deps) and push again. Do not leave the user to discover failed deploys.
+   - Ensure production deps are correct (e.g. `tsx` in `dependencies` for the worker). If the deploy fails during "Build image", run `npm run build` locally and fix any type/lint errors before pushing.
+
+4. **Summary**
+   - Proactively ensure localhost:3000 is up when testing or when the user reports the page not loading. Proactively clear `.next` and restart when the dev server is in a bad state. After pushes, verify Railway build/deploy or fix and re-push. The user's time should go to feature work, not environment/deploy debugging.
