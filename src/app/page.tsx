@@ -840,7 +840,7 @@ export default function Home() {
             )}
 
             {/* Transcript - plain text */}
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden">
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/40">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 bg-zinc-800/50 px-4 py-3">
                 <h2 className="font-semibold text-zinc-200">Transcript</h2>
                 <div className="flex flex-wrap items-center gap-2">
@@ -944,8 +944,9 @@ export default function Home() {
               <textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                className="min-h-[180px] w-full resize-y border-0 bg-transparent p-4 text-zinc-200 placeholder-zinc-500 focus:ring-0"
+                className="min-h-[320px] w-full resize border-0 bg-transparent p-4 text-zinc-200 placeholder-zinc-500 focus:ring-0"
                 placeholder="Transcript will appear here…"
+                title="Drag the corner to resize"
               />
             </div>
 
@@ -975,7 +976,7 @@ export default function Home() {
             )}
 
             {/* Speaker transcript */}
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden">
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/40">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 bg-zinc-800/50 px-4 py-3">
                 <h2 className="font-semibold text-zinc-200">By speaker</h2>
                 <div className="flex flex-wrap items-center gap-2">
@@ -1073,8 +1074,9 @@ export default function Home() {
               <textarea
                 value={speakerText}
                 onChange={(e) => setSpeakerText(e.target.value)}
-                className="min-h-[160px] w-full resize-y border-0 bg-transparent p-4 font-mono text-sm text-zinc-300 placeholder-zinc-500 focus:ring-0"
+                className="min-h-[280px] w-full resize border-0 bg-transparent p-4 font-mono text-sm text-zinc-300 placeholder-zinc-500 focus:ring-0"
                 placeholder="Speaker transcript…"
+                title="Drag the corner to resize"
               />
             </div>
           </section>
