@@ -1,8 +1,26 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-type Session = { email: string } | null;
+// #region agent log
+const DEBUG_LOG = (message: string, data: Record<string, unknown>, hypothesisId?: string) => {
+  fetch("http://127.0.0.1:7421/ingest/81861ae4-fa98-451e-aec2-a0d964acdcf8", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "32fb25" },
+    body: JSON.stringify({
+      sessionId: "32fb25",
+      location: "page.tsx",
+      message,
+      data,
+      hypothesisId,
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+};
+// #endregion
+
+type Session = { email: string; isAdmin?: boolean } | null;
 type SessionState = Session | "loading";
 
 type SavedTranscript = {
@@ -98,7 +116,7 @@ function LoginUI({
   initialStep,
   initialEmail,
 }: {
-  onSession: (email: string) => void;
+  onSession: (email: string, isAdmin?: boolean) => void;
   initialStep: "email" | "check-email";
   initialEmail: string;
 }) {
@@ -130,7 +148,9 @@ function LoginUI({
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && typeof data.email === "string") {
-        onSession(data.email);
+        const sessionRes = await fetch("/api/auth/session", { credentials: "include" });
+        const sessionData = sessionRes.ok ? await sessionRes.json().catch(() => ({})) : {};
+        onSession(data.email, !!sessionData.isAdmin);
       } else {
         setSendError((data.error as string) || "Sign-in failed.");
       }
@@ -186,7 +206,9 @@ function LoginUI({
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && typeof data.email === "string") {
-        onSession(data.email);
+        const sessionRes = await fetch("/api/auth/session", { credentials: "include" });
+        const sessionData = sessionRes.ok ? await sessionRes.json().catch(() => ({})) : {};
+        onSession(data.email, !!sessionData.isAdmin);
       } else {
         setCodeError((data.error as string) || "Invalid or expired code. Request a new sign-in email.");
       }
@@ -367,7 +389,7 @@ export default function Home() {
       .then((res) => (cancelled ? undefined : res.ok ? res.json() : null))
       .then((data) => {
         if (cancelled) return;
-        if (data?.email) setSession({ email: data.email });
+        if (data?.email) setSession({ email: data.email, isAdmin: !!data.isAdmin });
       })
       .catch(() => {})
       .finally(() => clearTimeout(t));
@@ -438,6 +460,9 @@ export default function Home() {
           localStorage.removeItem(STORAGE_KEY);
           return;
         }
+        // #region agent log
+        DEBUG_LOG("restore_from_storage", { jobId: stored.jobId, state: data.state }, "H5");
+        // #endregion
         setJobId(stored.jobId);
         setJobState(data.state);
         setJobProgress(data.progress ?? null);
@@ -480,6 +505,9 @@ export default function Home() {
       setSpeakerRenames({});
       setTimings(null);
       setIsUploading(true);
+      // #region agent log
+      DEBUG_LOG("upload_start", { fileName: audioFile.name, size: audioFile.size }, "H1");
+      // #endregion
 
       try {
         const form = new FormData();
@@ -487,7 +515,13 @@ export default function Home() {
         form.append("languageHint", languageHint);
         form.append("knownSpeakerNames", knownSpeakers);
 
+        // #region agent log
+        DEBUG_LOG("upload_fetch_start", {}, "H1");
+        // #endregion
         const response = await fetch("/api/jobs", { method: "POST", body: form });
+        // #region agent log
+        DEBUG_LOG("upload_fetch_resolved", { status: response.status, ok: response.ok }, "H1");
+        // #endregion
         const contentType = response.headers.get("content-type") ?? "";
         const raw = await response.text();
         let data: { jobId?: string; error?: string; state?: JobState; result?: JobResponse["result"] };
@@ -515,6 +549,9 @@ export default function Home() {
           return;
         }
         const id = data.jobId as string;
+        // #region agent log
+        DEBUG_LOG("upload_success", { jobId: id, state: data.state }, "H3");
+        // #endregion
         setJobId(id);
         setJobFileName(audioFile.name);
         try {
@@ -543,6 +580,9 @@ export default function Home() {
             : "Something went wrong. Please check your connection and try again."
         );
       } finally {
+        // #region agent log
+        DEBUG_LOG("upload_finally", {}, "H3");
+        // #endregion
         setIsUploading(false);
       }
     },
@@ -562,6 +602,9 @@ export default function Home() {
           setJobState("failed");
           return;
         }
+        // #region agent log
+        DEBUG_LOG("poll_response", { state: data.state, ok: res.ok, jobId }, "H4");
+        // #endregion
         if (!res.ok) {
           setError(toUserMessage((data as { error?: string }).error ?? "Something went wrong. Please try again."));
           setJobState("failed");
@@ -569,6 +612,9 @@ export default function Home() {
         }
         setJobState(data.state);
         setJobProgress(data.progress ?? null);
+        // #region agent log
+        DEBUG_LOG("poll_set_state", { state: data.state }, "H4");
+        // #endregion
         if (data.state === "failed") setError(toUserMessage(data.error ?? "Transcription failed."));
         if (data.state === "completed" && data.result) {
           setText(data.result.text);
@@ -632,22 +678,39 @@ export default function Home() {
           : "";
 
   if (!session || typeof session !== "object") {
-    return <LoginUI onSession={(email) => setSession({ email })} initialStep="email" initialEmail="" />;
+    return <LoginUI onSession={(email, isAdmin) => setSession({ email, isAdmin: !!isAdmin })} initialStep="email" initialEmail="" />;
   }
 
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100">
       <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-10">
-        <header className="mb-8 rounded-2xl border border-zinc-800 bg-gradient-to-b from-zinc-900/80 to-zinc-900/40 px-6 py-8 text-center shadow-lg">
-          <h1 className="m-0 text-3xl font-bold leading-tight tracking-tight text-white sm:text-4xl">
-            Transcriber
-          </h1>
-          <p className="mt-2 text-zinc-400">
-            Drop audio. We&apos;ll transcribe it.
-          </p>
-          <p className="mt-1 text-xs text-zinc-500">
-            Fast · Accurate · Saved to your account
-          </p>
+        <header className="mb-8 rounded-2xl border border-zinc-800 bg-gradient-to-b from-zinc-900/80 to-zinc-900/40 px-6 py-8 shadow-lg">
+          <div className="flex items-start justify-between gap-4 text-center">
+            <div className="min-w-0 flex-1">
+              <h1 className="m-0 text-3xl font-bold leading-tight tracking-tight text-white sm:text-4xl">
+                Transcriber
+              </h1>
+              <p className="mt-2 text-zinc-400">
+                Drop audio. We&apos;ll transcribe it.
+              </p>
+              <p className="mt-1 text-xs text-zinc-500">
+                Fast · Accurate · Saved to your account
+              </p>
+            </div>
+            {session.isAdmin && (
+              <Link
+                href="/admin"
+                className="shrink-0 rounded-lg p-2 text-zinc-400 hover:bg-zinc-700/50 hover:text-zinc-200"
+                title="Admin"
+                aria-label="Admin settings"
+              >
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 2.31.826 1.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 2.31-2.37 1.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-2.31-.826-1.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-2.31 2.37-1.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </Link>
+            )}
+          </div>
         </header>
 
         {/* Drop zone - hero */}
@@ -817,8 +880,8 @@ export default function Home() {
         {/* Output */}
         {(text || speakerText) && (
           <section className="space-y-6">
-            {/* Timing summary */}
-            {timings && (
+            {/* Timing summary (admin only) */}
+            {session.isAdmin && timings && (
               <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
                 <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
                   Timing
@@ -1120,7 +1183,7 @@ export default function Home() {
                     </p>
                     <p className="text-xs text-zinc-500">
                       Processed in <strong className="text-zinc-400">{t.endToEndSec}s</strong>
-                      {t.bottleneck && (
+                      {session.isAdmin && t.bottleneck && (
                         <span className="ml-2">· {t.bottleneck.replace("_", " ")}</span>
                       )}
                       {" · "}

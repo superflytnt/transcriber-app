@@ -1,0 +1,10 @@
+---
+description: Never ask the user to start the dev server or worker
+alwaysApply: true
+---
+
+# Never Ask to Start the Server
+
+- **Do not** include "start the server" or "run `npm run dev`" (or worker) in instructions to the user.
+- **Do** start the dev server and worker yourself when they are needed (e.g. for testing, debugging, or verification). Run them in the background.
+- If the app or worker must be running, start them as part of your workflow; the user should not be told to run them.
