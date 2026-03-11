@@ -42,6 +42,27 @@ export async function setAdmin(email: string, isAdmin: boolean): Promise<void> {
   }
 }
 
+/** Remove user from the list (and admin set). They can reappear if they sign in again. */
+export async function removeUser(email: string): Promise<void> {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) return;
+  const r = await getRedis();
+  if (r) {
+    await r.srem(USER_EMAILS_KEY, normalized);
+    await r.srem(ADMINS_KEY, normalized);
+  } else {
+    memoryUserEmails.delete(normalized);
+    memoryAdmins.delete(normalized);
+  }
+}
+
+/** Number of admins (for safety: don't delete last admin). */
+export async function countAdmins(): Promise<number> {
+  const r = await getRedis();
+  if (r) return await r.scard(ADMINS_KEY);
+  return memoryAdmins.size;
+}
+
 export async function isAdmin(email: string): Promise<boolean> {
   const normalized = email.trim().toLowerCase();
   if (!normalized) return false;

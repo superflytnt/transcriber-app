@@ -17,6 +17,9 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [resending, setResending] = useState<string | null>(null);
+  const [resendDone, setResendDone] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -89,6 +92,52 @@ export default function AdminPage() {
     }
   }, []);
 
+  const handleDelete = useCallback(async (email: string) => {
+    if (!confirm(`Remove ${email} from the user list? They can sign in again to reappear.`)) return;
+    setDeleting(email);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/delete-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setUsers((prev) => prev.filter((u) => u.email !== email));
+        setTotal((t) => Math.max(0, t - 1));
+      } else {
+        setError((data.error as string) || "Failed to remove user.");
+      }
+    } finally {
+      setDeleting(null);
+    }
+  }, []);
+
+  const handleResendLink = useCallback(async (email: string) => {
+    setResending(email);
+    setResendDone(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/resend-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setResendDone(email);
+        setTimeout(() => setResendDone(null), 2500);
+      } else {
+        setError((data.error as string) || "Failed to send link.");
+      }
+    } finally {
+      setResending(null);
+    }
+  }, []);
+
   if (session === "loading") {
     return (
       <main className="min-h-screen bg-zinc-950 text-zinc-100 flex items-center justify-center">
@@ -156,14 +205,15 @@ export default function AdminPage() {
                   <thead>
                     <tr className="border-b border-zinc-700 text-zinc-500">
                       <th className="pb-2 pr-4 font-medium">Email</th>
-                      <th className="pb-2 font-medium">Admin</th>
+                      <th className="pb-2 pr-4 font-medium">Admin</th>
+                      <th className="pb-2 w-0 font-medium text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {users.map((u) => (
                       <tr key={u.email} className="border-b border-zinc-800">
                         <td className="py-3 pr-4 text-zinc-200">{u.email}</td>
-                        <td className="py-3">
+                        <td className="py-3 pr-4">
                           <button
                             type="button"
                             disabled={toggling === u.email}
@@ -176,6 +226,36 @@ export default function AdminPage() {
                           >
                             {toggling === u.email ? "…" : u.isAdmin ? "Admin" : "Make admin"}
                           </button>
+                        </td>
+                        <td className="py-3 text-right">
+                          <div className="inline-flex items-center gap-1">
+                            <button
+                              type="button"
+                              title="Resend sign-in link"
+                              disabled={resending === u.email}
+                              onClick={() => handleResendLink(u.email)}
+                              className="rounded p-1.5 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 disabled:opacity-50"
+                            >
+                              {resendDone === u.email ? (
+                                <span className="text-emerald-400" title="Sent">✓</span>
+                              ) : (
+                                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                </svg>
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              title="Remove from user list"
+                              disabled={deleting === u.email}
+                              onClick={() => handleDelete(u.email)}
+                              className="rounded p-1.5 text-zinc-400 hover:bg-red-900/40 hover:text-red-300 disabled:opacity-50"
+                            >
+                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}

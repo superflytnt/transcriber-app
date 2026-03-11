@@ -882,7 +882,7 @@ export default function Home() {
           <section className="space-y-6">
             {/* Timing summary (admin only) */}
             {session.isAdmin && timings && (
-              <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+              <div className="rounded-xl border-2 border-red-600 bg-zinc-900/40 p-4">
                 <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
                   Timing
                 </h3>
@@ -1183,9 +1183,6 @@ export default function Home() {
                     </p>
                     <p className="text-xs text-zinc-500">
                       Processed in <strong className="text-zinc-400">{t.endToEndSec}s</strong>
-                      {session.isAdmin && t.bottleneck && (
-                        <span className="ml-2">· {t.bottleneck.replace("_", " ")}</span>
-                      )}
                       {" · "}
                       {new Date(t.createdAt).toLocaleString()}
                     </p>
