@@ -1,0 +1,27 @@
+---
+description: Do not ask the user to do things you can do; only ask when strictly necessary (e.g. security or impossible for the agent).
+alwaysApply: true
+---
+
+# Do it yourself—ask only when necessary
+
+## Rule
+
+**Do not ask the user to do something you can do.** Do it yourself. Only ask the user when you **literally cannot** do it (e.g. security restrictions, secrets, browser-only auth, or a one-time action only they can perform).
+
+## What you should do yourself (examples)
+
+- **Configuration** – Edit config files, env files, `.cursor/rules`, `package.json`, Railway/deply config, etc. Do not say "add this to your env" or "you need to configure X"; add or change it in the repo when possible, or give a single copy-paste and do the rest yourself.
+- **Running commands** – Start the dev server, run tests, run build, run migrations, run CLI tools. Do not tell the user "run npm run dev" or "run the tests"; run them.
+- **Fixing environment** – Clear caches (e.g. `.next`), install deps, fix paths, restart processes. Do it; don’t hand a checklist to the user.
+- **Code and file changes** – Implement the fix or feature; don’t suggest the user "try adding X" unless you’ve hit a hard limit.
+
+## When it’s okay to ask the user
+
+- **Secrets / credentials** – You must not write API keys, passwords, or tokens into the repo. Ask the user to set them in env or a secret store, or to paste a value once if there’s no other way.
+- **Actions only they can do** – Sign-in in a browser, approve OAuth, confirm a destructive action, or use a tool only they have access to.
+- **True ambiguity** – Genuine product or design choice with no default you can pick; then ask once, then proceed.
+
+## Summary
+
+- Default: **you do it.** Ask only when security or capability makes it impossible for you to do it. Don’t offload configuration, commands, or fixes to the user when you can perform them.

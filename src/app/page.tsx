@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+type Session = { email: string } | null;
+type SessionState = Session | "loading";
+
 type SavedTranscript = {
   id: string;
   originalFileName: string;
@@ -90,7 +93,162 @@ function toUserMessage(serverError: string | undefined): string {
   return s;
 }
 
+function LoginUI({
+  onSession,
+  initialStep,
+  initialEmail,
+}: {
+  onSession: (email: string) => void;
+  initialStep: "email" | "check-email";
+  initialEmail: string;
+}) {
+  const [step, setStep] = useState<"email" | "check-email">(initialStep);
+  const [email, setEmail] = useState(initialEmail);
+  const [pendingEmail, setPendingEmail] = useState(initialEmail);
+  const [code, setCode] = useState("");
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+
+  const handleSendLink = useCallback(async () => {
+    const e = email.trim();
+    if (!e) return;
+    setSendError(null);
+    setSending(true);
+    try {
+      const res = await fetch("/api/auth/send-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: e }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setPendingEmail(e);
+        setStep("check-email");
+      } else {
+        setSendError((data.error as string) || "Failed to send. Try again.");
+      }
+    } catch {
+      setSendError("Something went wrong. Try again.");
+    } finally {
+      setSending(false);
+    }
+  }, [email]);
+
+  const handleVerifyCode = useCallback(async () => {
+    const c = code.replace(/\s/g, "");
+    if (c.length !== 6) return;
+    setCodeError(null);
+    setVerifying(true);
+    try {
+      const res = await fetch("/api/auth/verify-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: c }),
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && typeof data.email === "string") {
+        onSession(data.email);
+      } else {
+        setCodeError((data.error as string) || "Invalid or expired code. Request a new sign-in email.");
+      }
+    } catch {
+      setCodeError("Something went wrong. Try again.");
+    } finally {
+      setVerifying(false);
+    }
+  }, [code, onSession]);
+
+  useEffect(() => {
+    if (code.replace(/\s/g, "").length === 6) {
+      handleVerifyCode();
+    }
+  }, [code, handleVerifyCode]);
+
+  if (step === "email") {
+    return (
+      <main className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col items-center justify-center px-4">
+        <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-gradient-to-b from-zinc-900/80 to-zinc-900/40 px-6 py-8 shadow-lg">
+          <h1 className="text-2xl font-bold tracking-tight text-white text-center">Transcriber</h1>
+          <p className="mt-2 text-zinc-400 text-center text-sm">Sign in to upload and save transcripts.</p>
+          <div className="mt-6">
+            <label htmlFor="login-email" className="block text-xs font-medium text-zinc-500 mb-1">
+              Email
+            </label>
+            <input
+              id="login-email"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSendLink()}
+              placeholder="you@example.com"
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-zinc-200 placeholder-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            />
+          </div>
+          {sendError && <p className="mt-2 text-sm text-red-400">{sendError}</p>}
+          <button
+            type="button"
+            onClick={handleSendLink}
+            disabled={sending || !email.trim()}
+            className="mt-4 w-full rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {sending ? "Sending…" : "Send login link"}
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col items-center justify-center px-4">
+      <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-gradient-to-b from-zinc-900/80 to-zinc-900/40 px-6 py-8 shadow-lg">
+        <h1 className="text-2xl font-bold tracking-tight text-white text-center">Check your email</h1>
+        <p className="mt-2 text-zinc-400 text-center text-sm">
+          We sent a sign-in link to <strong className="text-zinc-300">{pendingEmail}</strong>. Click the link in that email to sign in, or enter the 6-digit code below.
+        </p>
+        <div className="mt-6">
+          <label htmlFor="login-code" className="block text-xs font-medium text-zinc-500 mb-1">
+            6-digit code
+          </label>
+          <input
+            id="login-code"
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            pattern="[0-9]*"
+            maxLength={6}
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            placeholder="000000"
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-zinc-200 text-center text-lg tracking-widest placeholder-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          />
+        </div>
+        {codeError && <p className="mt-2 text-sm text-red-400">{codeError}</p>}
+        <button
+          type="button"
+          onClick={handleVerifyCode}
+          disabled={verifying || code.replace(/\s/g, "").length !== 6}
+          className="mt-4 w-full rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {verifying ? "Signing in…" : "Sign in"}
+        </button>
+        <button
+          type="button"
+          onClick={() => { setStep("email"); setCode(""); setCodeError(null); }}
+          className="mt-3 w-full text-sm text-zinc-500 hover:text-zinc-400"
+        >
+          Use a different email
+        </button>
+      </div>
+    </main>
+  );
+}
+
 export default function Home() {
+  const [session, setSession] = useState<SessionState>("loading");
   const [file, setFile] = useState<File | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [languageHint, setLanguageHint] = useState("");
@@ -162,15 +320,35 @@ export default function Home() {
   );
 
   useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/session", { credentials: "include" })
+      .then((res) => (cancelled ? undefined : res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        setSession(data?.email ? { email: data.email } : null);
+      })
+      .catch(() => {
+        if (!cancelled) setSession(null);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleLogout = useCallback(async () => {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+    setSession(null);
+  }, []);
+
+  useEffect(() => {
     if (copiedWhich == null) return;
     const t = setTimeout(() => setCopiedWhich(null), 2000);
     return () => clearTimeout(t);
   }, [copiedWhich]);
 
   const fetchSavedTranscripts = useCallback(async () => {
+    if (session === null || session === "loading") return;
     setTranscriptsLoadError(null);
     try {
-      const res = await fetch("/api/transcripts");
+      const res = await fetch("/api/transcripts", { credentials: "include" });
       if (res.ok) {
         const data = await res.json();
         setSavedTranscripts(data.transcripts ?? []);
@@ -183,11 +361,11 @@ export default function Home() {
       setTranscriptsLoadError("Could not load saved transcripts. Check your connection.");
       setSavedTranscripts([]);
     }
-  }, []);
+  }, [session]);
 
   useEffect(() => {
-    fetchSavedTranscripts();
-  }, [fetchSavedTranscripts]);
+    if (session && session !== "loading") fetchSavedTranscripts();
+  }, [session, fetchSavedTranscripts]);
 
   useEffect(() => {
     if (jobState === "completed") fetchSavedTranscripts();
@@ -280,6 +458,10 @@ export default function Home() {
         }
 
         if (!response.ok) {
+          if (response.status === 401) {
+            setSession(null);
+            return;
+          }
           setError(toUserMessage(data.error ?? "Upload failed."));
           return;
         }
@@ -319,7 +501,7 @@ export default function Home() {
         setIsUploading(false);
       }
     },
-    [languageHint, knownSpeakers]
+    [languageHint, knownSpeakers, setSession]
   );
 
   useEffect(() => {
@@ -404,18 +586,42 @@ export default function Home() {
             : `Transcribing…${progressSuffix}`
           : "";
 
+  if (session === "loading") {
+    return (
+      <main className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col items-center justify-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-zinc-500 border-t-emerald-400" />
+        <p className="mt-4 text-zinc-400">Loading…</p>
+      </main>
+    );
+  }
+
+  if (session === null) {
+    return <LoginUI onSession={(email) => setSession({ email })} initialStep="email" initialEmail="" />;
+  }
+
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100">
       <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-10">
         <header className="mb-8 rounded-2xl border border-zinc-800 bg-gradient-to-b from-zinc-900/80 to-zinc-900/40 px-6 py-8 text-center shadow-lg">
-          <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
-            Transcriber
-          </h1>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
+              Transcriber
+            </h1>
+            <span className="text-sm text-zinc-500">·</span>
+            <span className="text-sm text-zinc-400">Signed in as {session.email}</span>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="rounded-lg border border-zinc-600 px-3 py-1.5 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300"
+            >
+              Sign out
+            </button>
+          </div>
           <p className="mt-2 text-zinc-400">
             Drop audio. We&apos;ll transcribe it.
           </p>
           <p className="mt-1 text-xs text-zinc-500">
-            Fast · Accurate · Saved to folder with stats
+            Fast · Accurate · Saved to your account
           </p>
         </header>
 

@@ -39,6 +39,8 @@ export type TranscriptionJobInput = {
   uploadStartedAt?: number;
   /** Epoch ms when upload finished and file was persisted (for uploadMs) */
   uploadFinishedAt?: number;
+  /** User id for saving transcript to user-scoped dir */
+  userId?: string;
 };
 
 export type SpeakerSegment = {

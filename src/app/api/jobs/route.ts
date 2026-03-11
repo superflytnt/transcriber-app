@@ -5,6 +5,8 @@ import { Readable } from "node:stream";
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 import { env } from "@/lib/env";
+import { getCurrentUser } from "@/lib/auth";
+import { getUserId, getTranscriptSaveDirForUser } from "@/lib/user-id";
 import { bytesToMb, ensureDirectory, safeUploadPath } from "@/lib/files";
 import { getTranscriptionQueue } from "@/lib/queue";
 import { runTranscriptionJob } from "@/lib/run-transcription";
@@ -56,6 +58,11 @@ function isFileLike(
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  const email = getCurrentUser(request);
+  if (!email) {
+    return NextResponse.json({ error: "Sign in to upload and save transcripts." }, { status: 401 });
+  }
+  const userId = getUserId(email);
   let uploadPath: string | null = null;
   try {
     if (request.signal.aborted) {
@@ -63,6 +70,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
     const uploadStartedAt = Date.now();
     await ensureDirectory(env.uploadDir);
+    await ensureDirectory(getTranscriptSaveDirForUser(userId));
 
     const formData = await request.formData();
     if (request.signal.aborted) {
@@ -140,6 +148,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       knownSpeakerNames,
       uploadStartedAt,
       uploadFinishedAt,
+      userId,
     };
 
     if (env.redisUrl) {

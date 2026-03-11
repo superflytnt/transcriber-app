@@ -1,0 +1,29 @@
+---
+description: Test new feature enhancements thoroughly before claiming work is done.
+alwaysApply: true
+---
+
+# Test before saying it's done
+
+## Rule
+
+Do **not** tell the user a feature enhancement is done until you have **run verification** and it **passed**. "I've implemented X" is not enough—you must show that it works.
+
+## Required before claiming "done"
+
+1. **Build**
+   - Run `npm run build` (from `transcriber-app`). If it fails, fix the errors. Do not report done with a broken build.
+
+2. **Automated tests**
+   - Run `npm run test:e2e` (Playwright). If any test fails, fix the cause or update the test, then re-run until they pass.
+   - For API/upload-related changes, run `npm run test:api` as well (requires dev server on port 3000; start it if needed per env-and-deploy rule).
+
+3. **Feature-specific verification**
+   - If the change is user-facing (new UI, new flow, upload, transcripts, etc.): run the relevant e2e test(s) that cover that path, or run a quick manual check (e.g. curl to the API, or run the one Playwright test that hits that flow). Do not assume it works without running it.
+
+4. **Only then**
+   - After build succeeds and the applicable tests pass (and any feature-specific check passes), you may say the work is done. If something fails, fix it and re-run; do not hand off failures to the user.
+
+## Summary
+
+- Build must pass. E2e (and test:api when relevant) must pass. For new or changed features, explicitly verify the happy path. No "done" until verification succeeds.

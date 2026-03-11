@@ -1,8 +1,10 @@
 import type { Dirent } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { NextResponse } from "next/server";
-import { env } from "@/lib/env";
+import { NextRequest, NextResponse } from "next/server";
+import { getCurrentUser } from "@/lib/auth";
+import { getUserId, getTranscriptSaveDirForUser } from "@/lib/user-id";
+import { deleteLegacyTranscriptsOnce } from "@/lib/transcripts-cleanup";
 
 export const runtime = "nodejs";
 
@@ -16,16 +18,22 @@ type TranscriptListItem = {
   downloadUrl: string;
 };
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  const email = getCurrentUser(request);
+  if (!email) {
+    return NextResponse.json({ error: "Sign in to see your transcripts." }, { status: 401 });
+  }
+  await deleteLegacyTranscriptsOnce();
+  const saveDir = getTranscriptSaveDirForUser(getUserId(email));
   try {
-    await fs.mkdir(env.transcriptSaveDir, { recursive: true });
+    await fs.mkdir(saveDir, { recursive: true });
   } catch {
     // dir may already exist or be unreadable
   }
 
   let entries: Dirent[];
   try {
-    entries = (await fs.readdir(env.transcriptSaveDir, { withFileTypes: true })) as Dirent[];
+    entries = (await fs.readdir(saveDir, { withFileTypes: true })) as Dirent[];
   } catch {
     return NextResponse.json(
       { error: "Saved transcripts are temporarily unavailable. Please try again later." },
@@ -41,7 +49,7 @@ export async function GET(): Promise<NextResponse> {
 
   for (const name of jsonFiles) {
     try {
-      const jsonPath = path.join(env.transcriptSaveDir, name);
+      const jsonPath = path.join(saveDir, name);
       const raw = await fs.readFile(jsonPath, "utf-8");
       const data = JSON.parse(raw) as {
         id: string;

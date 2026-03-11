@@ -80,9 +80,12 @@ export async function runTranscriptionJob(
 
   const withTimings = { ...result, timings: fullTimings };
 
+  const saveDir = data.userId
+    ? (await import("./user-id")).getTranscriptSaveDirForUser(data.userId)
+    : env.transcriptSaveDir;
   try {
     await saveTranscript(
-      env.transcriptSaveDir,
+      saveDir,
       data.originalFileName ?? "audio",
       result.text,
       result.speakerText,
