@@ -1,0 +1,35 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Open Transcriber (local) in Simple Browser",
+      "type": "shell",
+      "command": "echo",
+      "args": ["${input:openTranscriberLocal}"],
+      "problemMatcher": [],
+      "presentation": { "reveal": "never", "echo": false }
+    },
+    {
+      "label": "Open Transcriber (Railway) in Simple Browser",
+      "type": "shell",
+      "command": "echo",
+      "args": ["${input:openTranscriberBrowser}"],
+      "problemMatcher": [],
+      "presentation": { "reveal": "never", "echo": false }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "openTranscriberLocal",
+      "type": "command",
+      "command": "simpleBrowser.show",
+      "args": ["http://localhost:3000"]
+    },
+    {
+      "id": "openTranscriberBrowser",
+      "type": "command",
+      "command": "simpleBrowser.show",
+      "args": ["https://transcriber2-production.up.railway.app"]
+    }
+  ]
+}
