@@ -1,0 +1,31 @@
+---
+description: Follow all project rules; run build and verify app; screenshot after every fix
+alwaysApply: true
+---
+
+# Always Follow Project Rules and Verify
+
+## Follow every Cursor rule
+
+- This project has rules in `.cursor/rules/`. They are **mandatory**, not suggestions.
+- Before finishing any task, confirm you have followed every rule that applies (e.g. test-before-done, understand-context-and-root-cause, never-ask-to-start-server, do-it-yourself).
+- If a rule says "do not claim done until X," you must do X. Do not skip steps because the change "seems small" or to save time.
+- **Do not skip verification because you're in a hurry or assume it works.** The user has explicitly asked for rules so that you follow them. Skipping is a failure.
+
+## Verify after implementing
+
+- After **every fix** and **every enhancement**, run verification before saying you're done:
+  1. **Build:** `npm run build` from `transcriber-app`. Fix any build errors. A clean build is required.
+  2. **Run the app:** Start the dev server (`npm run dev`) and load the app (or the changed route). If you see a runtime error (e.g. "Cannot find module './XXX.js'", server error, blank page, or **unstyled/minimal UI**), fix it. Stale `.next` cache often causes chunk or CSS issues: run `rm -rf .next && npm run build` then restart dev.
+  3. **Hit the changed flow:** Use the browser or API to exercise the code you changed (e.g. upload a file, open the admin page, load the login page). Do not assume it works without running it.
+  4. **Capture proof:** Take a **browser snapshot or screenshot** of the relevant screen (e.g. login page, upload flow, admin page) and confirm the UI looks correct (styled, not broken). Do not claim done without having seen the screen yourself.
+- Do **not** say a feature is done or "this should fix it" without having run the app, exercised the changed path, and captured a snapshot/screenshot. Handing off untested code leads to the user hitting errors you could have caught.
+
+## If the app shows unstyled or broken UI
+
+- **Unstyled login** (black screen, plain white input/button, no card styling): Usually stale build or CSS chunk not loading. Run from `transcriber-app`: `rm -rf .next && npm run build`, then `npm run dev`. Reload the page.
+- **"Cannot find module './XXX.js'"**: Same. Clear `.next`, rebuild, restart dev.
+
+## Summary
+
+- Treat all `.cursor/rules` as required. Run build, run the app, verify the changed behavior, and take a browser snapshot/screenshot before claiming done. Do not skip these steps.

@@ -1,0 +1,27 @@
+---
+description: Understand subtext and fix root cause; don't distract with wording changes
+alwaysApply: true
+---
+
+# Understand Subtext and Fix Root Cause
+
+When the user asks *why* something is happening (e.g. "Why is it stuck?", "Why is it still saying X?", "Why does this take so long?"), treat it as a request to **investigate and fix the real cause**, not to make the symptom less visible.
+
+## Do not
+
+- **Change only the words.** Rewording the message, label, or error text is not fixing the problem. If the user is asking why something is stuck or wrong, they want the behavior fixed, not a different caption.
+- **Make the error "go away" by hiding it.** Don't replace an error with a friendlier message unless you've also addressed why the error occurs.
+- **Assume the UI is correct.** If the user says "it's stuck in this process," consider: Is it actually stuck? Is the step wrong? Is the server not responding? Investigate before changing copy.
+
+## Do
+
+- **Read the subtext.** "Why is it stuck?" usually means: figure out what’s actually happening and fix it, not just explain or rephrase.
+- **Get more data when needed.** If you don’t know why something is stuck or slow, add or use logs, inspect the flow (client → server → worker), and reproduce. Use timing logs, server logs, or network behavior to see where time is spent or where it blocks.
+- **Fix the underlying behavior.** Prefer changes to flow, timeouts, architecture (e.g. return early and poll), or bug fixes over changing labels or error messages alone.
+- **Confirm the fix matches the concern.** After changing code, briefly state what was wrong and how the change addresses it (e.g. "The server was doing X in the request; now it does Y so the client can show progress.").
+
+## Example
+
+- **User:** "Why is it still saying 'Upload' after it's uploaded? Shouldn't it be in queue or something?"
+- **Wrong:** Change "Upload" to "Processing" or add a note that "large files take time."
+- **Right:** Realize the client stays on "Upload" until the server responds; if the server runs transcription in the same request, the response is delayed. Fix by having the server return a job id as soon as the file is saved and run transcription in the background so the client can poll and show Queue → Transcribing.

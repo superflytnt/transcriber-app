@@ -8,6 +8,7 @@ import { env } from "@/lib/env";
 import { getCurrentUser } from "@/lib/auth";
 import { getUserId, getTranscriptSaveDirForUser } from "@/lib/user-id";
 import { bytesToMb, ensureDirectory, safeUploadPath } from "@/lib/files";
+import { getInlineJob, setInlineJob, updateInlineJobProgress } from "@/lib/inline-jobs";
 import { getTranscriptionQueue } from "@/lib/queue";
 import { runTranscriptionJob } from "@/lib/run-transcription";
 
@@ -72,7 +73,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     await ensureDirectory(env.uploadDir);
     await ensureDirectory(getTranscriptSaveDirForUser(userId));
 
+    const formDataStart = Date.now();
     const formData = await request.formData();
+    const formDataMs = Date.now() - formDataStart;
+    console.log("[POST /api/jobs] formData received", { formDataMs, formDataMb: "(see file size below)" });
     if (request.signal.aborted) {
       return NextResponse.json({ error: "Request was cancelled." }, { status: 499 });
     }
@@ -120,10 +124,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     uploadPath = safeUploadPath(env.uploadDir, fileValue.name);
+    const writeStart = Date.now();
     const writeStream = fs.createWriteStream(uploadPath);
     await pipeline(Readable.fromWeb(fileValue.stream() as never), writeStream, {
       signal: request.signal,
     });
+    const writeMs = Date.now() - writeStart;
+    console.log("[POST /api/jobs] file written to disk", { writeMs, fileMb: bytesToMb(fileValue.size) });
     if (request.signal.aborted) {
       await fsPromises.unlink(uploadPath).catch(() => undefined);
       return NextResponse.json({ error: "Request was cancelled." }, { status: 499 });
@@ -152,6 +159,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     };
 
     if (env.redisUrl) {
+      const queueStart = Date.now();
       const queue = getTranscriptionQueue();
       const job = await queue.add("transcribe", jobData, {
         jobId: uuidv4(),
@@ -160,6 +168,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         attempts: 2,
         backoff: { type: "exponential", delay: 5000 },
       });
+      console.log("[POST /api/jobs] job queued (Redis)", { queueMs: Date.now() - queueStart, jobId: job.id });
       return NextResponse.json({ jobId: job.id });
     }
 
@@ -167,17 +176,31 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       await fsPromises.unlink(uploadPath).catch(() => undefined);
       return NextResponse.json({ error: "Request was cancelled." }, { status: 499 });
     }
-    const result = await runTranscriptionJob(jobData);
     const jobId = `inline-${uuidv4()}`;
-    return NextResponse.json({
-      jobId,
-      state: "completed",
-      result: {
-        text: result.text,
-        speakerText: result.speakerText,
-        timings: result.timings,
-      },
-    });
+    setInlineJob(jobId, { state: "active" });
+    console.log("[POST /api/jobs] no Redis — returning jobId immediately, running transcription in background", { jobId });
+    void runTranscriptionJob(jobData, (chunkIndex, totalChunks) => {
+      updateInlineJobProgress(jobId, chunkIndex + 1, totalChunks);
+    })
+      .then((result) => {
+        const job = getInlineJob(jobId);
+        if (job) {
+          job.state = "completed";
+          job.result = { text: result.text, speakerText: result.speakerText, segments: result.segments, timings: result.timings };
+          job.progress = undefined;
+        }
+        console.log("[POST /api/jobs] inline transcription finished", { jobId });
+      })
+      .catch((err) => {
+        const job = getInlineJob(jobId);
+        if (job) {
+          job.state = "failed";
+          job.error = err instanceof Error ? err.message : String(err);
+          job.progress = undefined;
+        }
+        console.error("[POST /api/jobs] inline transcription failed", jobId, err);
+      });
+    return NextResponse.json({ jobId });
   } catch (err) {
     if (uploadPath) {
       await fsPromises.unlink(uploadPath).catch(() => undefined);

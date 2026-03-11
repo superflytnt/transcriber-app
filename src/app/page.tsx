@@ -339,6 +339,9 @@ export default function Home() {
   const [speakerText, setSpeakerText] = useState("");
   const [timings, setTimings] = useState<JobTimings | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  /** 0–100 during upload when known; null before/after or when not computable. */
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadTick, setUploadTick] = useState(0);
   const [jobProgress, setJobProgress] = useState<JobProgress | null>(null);
   const [jobFileName, setJobFileName] = useState<string | null>(null);
   const [savedTranscripts, setSavedTranscripts] = useState<SavedTranscript[]>([]);
@@ -348,6 +351,7 @@ export default function Home() {
   const [speakerRenames, setSpeakerRenames] = useState<Record<string, string>>({});
   const [savedDownloadOpenId, setSavedDownloadOpenId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadStartedAtRef = useRef<number>(0);
 
   function applySpeakerRenames(baseText: string, renames: Record<string, string>): string {
     return baseText
@@ -438,6 +442,13 @@ export default function Home() {
     if (jobState === "completed") fetchSavedTranscripts();
   }, [jobState, fetchSavedTranscripts]);
 
+  // Re-render periodically while uploading so "Starting job" appears after 45s if server is slow
+  useEffect(() => {
+    if (!isUploading) return;
+    const id = setInterval(() => setUploadTick((t) => t + 1), 5000);
+    return () => clearInterval(id);
+  }, [isUploading]);
+
   // Restore in-progress or last job from localStorage so refresh/return still shows status
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -505,47 +516,66 @@ export default function Home() {
       setSpeakerRenames({});
       setTimings(null);
       setIsUploading(true);
+      setUploadProgress(null);
+      uploadStartedAtRef.current = Date.now();
       // #region agent log
       DEBUG_LOG("upload_start", { fileName: audioFile.name, size: audioFile.size }, "H1");
       // #endregion
 
-      try {
-        const form = new FormData();
-        form.append("file", audioFile);
-        form.append("languageHint", languageHint);
-        form.append("knownSpeakerNames", knownSpeakers);
+      const form = new FormData();
+      form.append("file", audioFile);
+      form.append("languageHint", languageHint);
+      form.append("knownSpeakerNames", knownSpeakers);
 
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/jobs");
+      xhr.withCredentials = true;
+
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e.lengthComputable && e.total > 0) {
+          const pct = Math.min(100, Math.round((100 * e.loaded) / e.total));
+          setUploadProgress(pct);
+        }
+      });
+
+      const done = () => {
+        DEBUG_LOG("upload_finally", {}, "H3");
+        setIsUploading(false);
+        setUploadProgress(null);
+      };
+
+      xhr.onload = () => {
         // #region agent log
-        DEBUG_LOG("upload_fetch_start", {}, "H1");
+        DEBUG_LOG("upload_fetch_resolved", { status: xhr.status, ok: xhr.status >= 200 && xhr.status < 300 }, "H1");
         // #endregion
-        const response = await fetch("/api/jobs", { method: "POST", body: form });
-        // #region agent log
-        DEBUG_LOG("upload_fetch_resolved", { status: response.status, ok: response.ok }, "H1");
-        // #endregion
-        const contentType = response.headers.get("content-type") ?? "";
-        const raw = await response.text();
+        const contentType = xhr.getResponseHeader("content-type") ?? "";
+        const raw = xhr.responseText;
         let data: { jobId?: string; error?: string; state?: JobState; result?: JobResponse["result"] };
         try {
           if (!contentType.includes("application/json")) {
             setError("Something went wrong. Please try again.");
+            done();
             return;
           }
           data = JSON.parse(raw) as typeof data;
         } catch {
           setError("Something went wrong. Please try again.");
+          done();
           return;
         }
-
-        if (!response.ok) {
-          if (response.status === 401) {
-            setSession(null);
-            return;
-          }
+        if (xhr.status === 401) {
+          setSession(null);
+          done();
+          return;
+        }
+        if (xhr.status < 200 || xhr.status >= 300) {
           setError(toUserMessage(data.error ?? "Upload failed."));
+          done();
           return;
         }
         if (!data.jobId) {
           setError("Something went wrong. Please try again.");
+          done();
           return;
         }
         const id = data.jobId as string;
@@ -567,24 +597,32 @@ export default function Home() {
           setSpeakerText(data.result.speakerText);
           setSpeakerRenames({});
           setTimings(data.result.timings ?? null);
-          return;
+        } else {
+          setJobState("waiting");
+          setJobProgress(null);
         }
-        setJobState("waiting");
-        setJobProgress(null);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "";
-        const isTimeout = /timeout|timed out|504/i.test(msg);
+        done();
+      };
+
+      xhr.onerror = () => {
+        setError("Something went wrong. Please check your connection and try again.");
+        done();
+      };
+
+      xhr.ontimeout = () => {
         setError(
-          isTimeout
-            ? "Upload took too long. Large files can take several minutes. Please try again."
-            : "Something went wrong. Please check your connection and try again."
+          "The request timed out. The server may still be processing your file — check Saved transcripts in a minute or refresh and try again. If it keeps happening, try a smaller file or check your connection."
         );
-      } finally {
-        // #region agent log
-        DEBUG_LOG("upload_finally", {}, "H3");
-        // #endregion
-        setIsUploading(false);
-      }
+        done();
+      };
+
+      // 10 minutes: server returns as soon as file is saved (then transcription runs in background). Long timeout for slow uploads or slow server receive.
+      xhr.timeout = 600_000;
+
+      // #region agent log
+      DEBUG_LOG("upload_fetch_start", {}, "H1");
+      // #endregion
+      xhr.send(form);
     },
     [languageHint, knownSpeakers, setSession]
   );
@@ -666,12 +704,25 @@ export default function Home() {
       : jobFileName
         ? ` (${jobFileName})`
         : "";
+  // One message per step: Upload → Queue → Transcribe. As soon as client hits 100% upload (or we've been waiting a long time), show Queue so we don't leave them stuck on "Upload" while server responds.
+  const uploadWaitingLong = isUploading && uploadStartedAtRef.current > 0 && Date.now() - uploadStartedAtRef.current > 45_000;
+  const step = isUploading
+    ? (uploadProgress != null && uploadProgress >= 100 ? "queue" : uploadWaitingLong ? "queue" : "upload")
+    : jobState === "waiting" || jobState === "delayed" || !jobState
+      ? "queue"
+      : jobState === "active" || jobState === "paused"
+        ? "transcribe"
+        : null;
   const statusLabel =
-    isUploading
-      ? "Uploading…"
-      : jobState === "waiting" || jobState === "delayed" || !jobState
-        ? `Waiting in queue…${jobFileName ? ` ${jobFileName}` : ""}`
-        : jobState === "active" || jobState === "paused"
+    step === "upload"
+      ? uploadProgress != null && uploadProgress < 100
+        ? `Uploading… ${uploadProgress}%`
+        : "Uploading…"
+      : step === "queue"
+        ? isUploading
+          ? "Starting job…"
+          : `Waiting in queue…${jobFileName ? ` ${jobFileName}` : ""}`
+        : step === "transcribe"
           ? jobState === "paused"
             ? "Paused"
             : `Transcribing…${progressSuffix}`
@@ -754,13 +805,40 @@ export default function Home() {
           >
             {isBusy ? (
               <div className="flex flex-col items-center gap-4">
+                {/* Steps: Upload → Queue → Transcribe */}
+                <div className="flex items-center gap-2 text-xs">
+                  <span className={step === "upload" ? "text-emerald-400 font-medium" : "text-zinc-500"}>
+                    {step === "upload" ? "1. Upload" : "Upload ✓"}
+                  </span>
+                  <span className="text-zinc-600">→</span>
+                  <span className={step === "queue" ? "text-emerald-400 font-medium" : "text-zinc-500"}>
+                    {step === "queue" ? "2. Queue" : step === "upload" ? "Queue" : "Queue ✓"}
+                  </span>
+                  <span className="text-zinc-600">→</span>
+                  <span className={step === "transcribe" ? "text-emerald-400 font-medium" : "text-zinc-500"}>
+                    {step === "transcribe" ? "3. Transcribe" : step === "upload" || step === "queue" ? "Transcribe" : "Transcribe ✓"}
+                  </span>
+                </div>
                 <span className="inline-block h-10 w-10 animate-spin rounded-full border-2 border-zinc-500 border-t-emerald-400" />
                 <p className="text-lg font-medium text-zinc-200">{statusLabel}</p>
-                <p className="text-xs text-zinc-500 text-center max-w-xs">
-                  Transcription runs in the background — wait or come back later; status will still show.
+                <p className={`text-xs text-zinc-500 text-center ${step === "queue" && isUploading ? "max-w-sm" : "max-w-xs"}`}>
+                  {step === "upload"
+                    ? "Large files can take 1–2 minutes."
+                    : step === "queue" && isUploading
+                      ? "Server is saving and queuing — large files can take a minute."
+                      : "Transcription runs in the background — wait or come back later; status will still show."}
                 </p>
                 <div className="h-1.5 w-48 overflow-hidden rounded-full bg-zinc-700">
-                  <div className="h-full w-full animate-shimmer rounded-full bg-gradient-to-r from-transparent via-emerald-400/60 to-transparent bg-[length:200%_100%]" />
+                  {step === "upload" && uploadProgress != null && uploadProgress < 100 ? (
+                    <div
+                      className="h-full rounded-full bg-emerald-500 transition-[width] duration-300"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  ) : step === "queue" && isUploading ? (
+                    <div className="h-full w-full rounded-full bg-emerald-500" title="Upload complete, waiting for server" />
+                  ) : (
+                    <div className="h-full w-full animate-shimmer rounded-full bg-gradient-to-r from-transparent via-emerald-400/60 to-transparent bg-[length:200%_100%]" />
+                  )}
                 </div>
               </div>
             ) : file && !isBusy && (jobState === "completed" || jobState === "failed") ? (
@@ -882,7 +960,7 @@ export default function Home() {
           <section className="space-y-6">
             {/* Timing summary (admin only) */}
             {session.isAdmin && timings && (
-              <div className="rounded-xl border-2 border-red-600 bg-zinc-900/40 p-4">
+              <div className="rounded-xl border-2 border-red-800/60 bg-zinc-900/40 p-4">
                 <h3 className="mb-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
                   Timing
                 </h3>
