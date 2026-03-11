@@ -522,7 +522,7 @@ export default function Home() {
           <div className="mb-6 rounded-xl border-2 border-red-500 bg-red-950/60 px-5 py-4 shadow-lg ring-2 ring-red-500/20">
             <p className="font-semibold text-red-100">Error</p>
             <p className="mt-1 text-red-200">{error}</p>
-            {/format|unsupported|supported:|m4a|mp3|wav|aac|webm|flac|ogg|mp4|mpeg|mov/i.test(error) && (
+            {/format|unsupported|supported:|m4a|mp3|wav|aac|webm|flac|ogg|mp4|mpeg|mov/i.test(error) && !/Use one of:/.test(error) && (
               <p className="mt-2 text-sm text-red-300/90">
                 Supported: m4a, m4v, mp3, wav, aac, webm, qta, flac, ogg, mp4, mpeg, mpga, mov. Try again with one of these.
               </p>
