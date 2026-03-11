@@ -2,6 +2,15 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "Start Transcriber and show in browser",
+      "type": "shell",
+      "command": "./scripts/show-local.sh",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "silent", "echo": true },
+      "group": { "kind": "build", "isDefault": true }
+    },
+    {
       "label": "Open Transcriber (local) in Simple Browser",
       "type": "shell",
       "command": "echo",

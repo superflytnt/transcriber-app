@@ -191,7 +191,7 @@ export default function Home() {
   const startTranscription = useCallback(
     async (audioFile: File) => {
       if (!isAcceptedFile(audioFile)) {
-        setError(`Unsupported format. Use: ${ALLOWED_EXTENSIONS.join(", ").replace(/\./g, "")}.`);
+        setError("Unsupported format.");
         return;
       }
       setError(null);
@@ -305,7 +305,7 @@ export default function Home() {
       const dropped = e.dataTransfer.files?.[0];
       if (!dropped) return;
       if (!isAcceptedFile(dropped)) {
-        setError(`Unsupported format. Use: ${ALLOWED_EXTENSIONS.join(", ").replace(/\./g, "")}.`);
+        setError("Unsupported format.");
         return;
       }
       setError(null);
