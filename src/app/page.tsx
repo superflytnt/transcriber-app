@@ -43,12 +43,19 @@ type JobResponse = {
 
 const STORAGE_KEY = "transcriber_current_job";
 
-const ALLOWED_EXTENSIONS = ACCEPT_AUDIO.split(",");
+const ALLOWED_EXTENSIONS = ACCEPT_AUDIO.split(",").map((x) => x.trim());
 
 function isAcceptedFile(file: File): boolean {
-  const ext = "." + (file.name.split(".").pop() ?? "").toLowerCase();
+  if (!file.name || file.name.trim() === "") return false;
+  const name = file.name.trim().toLowerCase();
+  const ext = "." + (name.split(".").pop() ?? "").trim();
   if (ALLOWED_EXTENSIONS.includes(ext)) return true;
-  if ((file.type || "").toLowerCase().startsWith("audio/") && file.name.trim()) return true;
+  if (name.includes(".")) {
+    for (const allowed of ALLOWED_EXTENSIONS) {
+      if (name.endsWith(allowed)) return true;
+    }
+  }
+  if ((file.type || "").toLowerCase().startsWith("audio/")) return true;
   return false;
 }
 
@@ -190,8 +197,12 @@ export default function Home() {
 
   const startTranscription = useCallback(
     async (audioFile: File) => {
-      if (!isAcceptedFile(audioFile)) {
-        setError("Unsupported format.");
+      if (!audioFile.name?.trim()) {
+        setError("Please choose a file with a name.");
+        return;
+      }
+      if (audioFile.size === 0) {
+        setError("File is empty. Please choose an audio file with content.");
         return;
       }
       setError(null);
@@ -304,13 +315,8 @@ export default function Home() {
       setIsDragOver(false);
       const dropped = e.dataTransfer.files?.[0];
       if (!dropped) return;
-      if (!isAcceptedFile(dropped)) {
-        setError("Unsupported format.");
-        return;
-      }
       setError(null);
       setFile(dropped);
-      // Don't clear the file input here — it can trigger onChange(null) and reset file state
       startTranscription(dropped);
     },
     [startTranscription]
@@ -318,7 +324,6 @@ export default function Home() {
 
   const handleFileSelect = useCallback(
     (selected: File | null) => {
-      // If we get null (e.g. spurious input clear), don't wipe file while upload/job is in progress
       if (selected === null && (isUploading || (jobId != null && jobState !== "completed" && jobState !== "failed"))) {
         return;
       }

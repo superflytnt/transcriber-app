@@ -7,6 +7,8 @@
   },
   "scripts": {
     "dev": "next dev",
+    "test:e2e": "playwright test",
+    "test:api": "./scripts/test-upload-api.sh",
     "build": "next build",
     "start": "node scripts/start.mjs",
     "start:web": "next start",
@@ -27,6 +29,7 @@
     "uuid": "^13.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@types/fluent-ffmpeg": "^2.1.28",
     "@types/node": "^20",
     "@types/react": "^18",
