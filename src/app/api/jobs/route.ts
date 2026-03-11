@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import fsPromises from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import { NextRequest, NextResponse } from "next/server";
@@ -116,7 +117,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       signal: request.signal,
     });
     if (request.signal.aborted) {
-      await fs.unlink(uploadPath).catch(() => undefined);
+      await fsPromises.unlink(uploadPath).catch(() => undefined);
       return NextResponse.json({ error: "Request was cancelled." }, { status: 499 });
     }
     const uploadFinishedAt = Date.now();
@@ -154,7 +155,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     if (request.signal.aborted) {
-      await fs.unlink(uploadPath).catch(() => undefined);
+      await fsPromises.unlink(uploadPath).catch(() => undefined);
       return NextResponse.json({ error: "Request was cancelled." }, { status: 499 });
     }
     const result = await runTranscriptionJob(jobData);
@@ -170,7 +171,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     });
   } catch (err) {
     if (uploadPath) {
-      await fs.unlink(uploadPath).catch(() => undefined);
+      await fsPromises.unlink(uploadPath).catch(() => undefined);
     }
     const isAbort = err instanceof Error && err.name === "AbortError";
     if (isAbort) {
