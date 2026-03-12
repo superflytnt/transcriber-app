@@ -27,16 +27,17 @@ export async function GET(_: Request, { params }: Params): Promise<NextResponse>
     if (!job) {
       return NextResponse.json({ error: "Job not found." }, { status: 404 });
     }
+    const base = { fileInfo: job.fileInfo };
     if (job.state === "completed" && job.result) {
-      return NextResponse.json({ state: job.state, progress: job.progress, result: job.result });
+      return NextResponse.json({ ...base, state: job.state, progress: job.progress, result: job.result });
     }
     if (job.state === "failed") {
       return NextResponse.json(
-        { state: job.state, progress: job.progress, error: toUserMessage(job.error ?? "") },
+        { ...base, state: job.state, progress: job.progress, error: toUserMessage(job.error ?? "") },
         { status: 500 }
       );
     }
-    return NextResponse.json({ state: job.state, progress: job.progress });
+    return NextResponse.json({ ...base, state: job.state, progress: job.progress });
   }
 
   const queue = getTranscriptionQueue();

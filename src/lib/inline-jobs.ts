@@ -5,9 +5,26 @@ import { env } from "./env";
 
 export type InlineJobState = "active" | "completed" | "failed";
 
+export type FileInfo = {
+  durationSeconds: number;
+  sizeMb: number;
+  chunkCount: number;
+  durationFormatted: string;
+};
+
+export type InlineJobProgress = {
+  chunk: number;
+  total: number;
+  lastChunkMs?: number;
+  avgChunkMs?: number;
+  chunkStartedAt?: number;
+  completedChunkMs?: number[];
+};
+
 export type InlineJob = {
   state: InlineJobState;
-  progress?: { chunk: number; total: number };
+  progress?: InlineJobProgress;
+  fileInfo?: FileInfo;
   result?: TranscriptionJobResult;
   error?: string;
 };
@@ -43,10 +60,28 @@ export async function getInlineJob(jobId: string): Promise<InlineJob | undefined
   }
 }
 
-export async function updateInlineJobProgress(jobId: string, chunk: number, total: number): Promise<void> {
+export async function updateInlineJobProgress(
+  jobId: string,
+  chunk: number,
+  total: number,
+  chunkMs?: number
+): Promise<void> {
   const job = await getInlineJob(jobId);
   if (job && job.state === "active") {
-    job.progress = { chunk, total };
+    const prev = job.progress;
+    const completedChunkMs = prev?.completedChunkMs ? [...prev.completedChunkMs] : [];
+    if (chunkMs != null) completedChunkMs.push(chunkMs);
+    const avgChunkMs = completedChunkMs.length > 0
+      ? Math.round(completedChunkMs.reduce((a, b) => a + b, 0) / completedChunkMs.length)
+      : undefined;
+    job.progress = {
+      chunk,
+      total,
+      lastChunkMs: chunkMs ?? prev?.lastChunkMs,
+      avgChunkMs,
+      chunkStartedAt: Date.now(),
+      completedChunkMs,
+    };
     await setInlineJob(jobId, job);
   }
 }

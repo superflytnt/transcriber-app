@@ -46,7 +46,7 @@ export type TranscribeTimings = Pick<
   "chunkingMs" | "chunkCount" | "perChunk" | "stitchingMs" | "transcriptionOnlyMs"
 >;
 
-export type TranscribeProgressCallback = (chunkIndex: number, totalChunks: number) => void;
+export type TranscribeProgressCallback = (chunkIndex: number, totalChunks: number, chunkMs?: number) => void;
 
 export const transcribeWithDiarization = async (
   filePath: string,
@@ -118,7 +118,7 @@ export const transcribeWithDiarization = async (
     }
 
     console.log(`[transcribe] Finished chunk ${chunkNum} of ${totalChunks} (${totalMs}ms)`);
-    onProgress?.(chunk.chunkIndex + 1, totalChunks);
+    onProgress?.(chunk.chunkIndex + 1, totalChunks, totalMs);
   }
 
   const stitchingStart = Date.now();

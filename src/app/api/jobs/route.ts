@@ -192,10 +192,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "Request was cancelled." }, { status: 499 });
     }
     const jobId = `inline-${uuidv4()}`;
-    await setInlineJob(jobId, { state: "active" });
+    await setInlineJob(jobId, { state: "active", fileInfo: fileInfo ?? undefined });
     console.log("[POST /api/jobs] no Redis — returning jobId immediately, running transcription in background", { jobId, fileInfo });
-    void runTranscriptionJob(jobData, (chunkIndex, totalChunks) => {
-      void updateInlineJobProgress(jobId, chunkIndex + 1, totalChunks);
+    void runTranscriptionJob(jobData, (chunkIndex, totalChunks, chunkMs) => {
+      void updateInlineJobProgress(jobId, chunkIndex + 1, totalChunks, chunkMs);
     })
       .then(async (result) => {
         await setInlineJobState(jobId, {

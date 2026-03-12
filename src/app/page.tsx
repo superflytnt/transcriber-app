@@ -36,7 +36,14 @@ type JobTimings = {
   bottleneck?: string;
 };
 
-type JobProgress = { chunk?: number; total?: number };
+type JobProgress = {
+  chunk?: number;
+  total?: number;
+  lastChunkMs?: number;
+  avgChunkMs?: number;
+  chunkStartedAt?: number;
+  completedChunkMs?: number[];
+};
 
 type FileInfo = {
   durationSeconds: number;
@@ -48,6 +55,7 @@ type FileInfo = {
 type JobResponse = {
   state: JobState;
   progress?: JobProgress;
+  fileInfo?: FileInfo;
   error?: string;
   result?: {
     text: string;
@@ -739,6 +747,7 @@ export default function Home() {
         }
         setJobState(data.state);
         setJobProgress(data.progress ?? null);
+        if (data.fileInfo && !fileInfo) setFileInfo(data.fileInfo);
         if (data.state === "failed") {
           setError(toUserMessage(data.error ?? "Transcription failed."));
           localStorage.removeItem(STORAGE_KEY);
@@ -822,6 +831,19 @@ export default function Home() {
             ? "Paused"
             : `Transcribing…${progressSuffix}`
           : "";
+
+  const etaLabel = (() => {
+    if (step !== "transcribe" || !jobProgress?.total || !jobProgress.avgChunkMs) return null;
+    const completedChunks = jobProgress.completedChunkMs?.length ?? 0;
+    const remaining = jobProgress.total - completedChunks;
+    if (remaining <= 0) return null;
+    const etaMs = remaining * jobProgress.avgChunkMs;
+    const now = new Date();
+    const etaTime = new Date(now.getTime() + etaMs);
+    const etaMinutes = Math.ceil(etaMs / 60000);
+    const timeStr = etaTime.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    return `~${etaMinutes} min remaining · done by ${timeStr}`;
+  })();
 
   if (!session || typeof session !== "object") {
     return <LoginUI onSession={(email, isAdmin) => setSession({ email, isAdmin: !!isAdmin })} initialStep="email" initialEmail="" />;
@@ -925,6 +947,9 @@ export default function Home() {
                     <span>{fileInfo.chunkCount} {fileInfo.chunkCount === 1 ? "chunk" : "chunks"}</span>
                   </div>
                 )}
+                {etaLabel && (
+                  <p className="text-xs font-medium text-emerald-400">{etaLabel}</p>
+                )}
                 <p className={`text-xs text-zinc-500 text-center ${step === "queue" && isUploading ? "max-w-sm" : "max-w-xs"}`}>
                   {step === "upload"
                     ? "Large files can take 1–2 minutes."
@@ -940,6 +965,11 @@ export default function Home() {
                     />
                   ) : step === "queue" && isUploading ? (
                     <div className="h-full w-full rounded-full bg-emerald-500" title="Upload complete, waiting for server" />
+                  ) : step === "transcribe" && jobProgress?.total && jobProgress.total > 1 && (jobProgress.completedChunkMs?.length ?? 0) > 0 ? (
+                    <div
+                      className="h-full rounded-full bg-emerald-500 transition-[width] duration-500"
+                      style={{ width: `${Math.round(((jobProgress.completedChunkMs?.length ?? 0) / jobProgress.total) * 100)}%` }}
+                    />
                   ) : (
                     <div className="h-full w-full animate-shimmer rounded-full bg-gradient-to-r from-transparent via-emerald-400/60 to-transparent bg-[length:200%_100%]" />
                   )}

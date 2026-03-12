@@ -11,7 +11,7 @@ import {
 import { saveTranscript } from "./save-transcript";
 import { transcribeWithDiarization } from "./transcriber";
 
-export type RunTranscriptionProgress = (chunkIndex: number, totalChunks: number) => void;
+export type RunTranscriptionProgress = (chunkIndex: number, totalChunks: number, chunkMs?: number) => void;
 
 /**
  * Run a single transcription job (shared by worker and inline API when Redis is not used).
