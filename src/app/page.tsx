@@ -390,12 +390,19 @@ export default function Home() {
   }
 
   const speakerLabels = useMemo(() => {
-    const set = new Set<string>();
+    const seen = new Set<string>();
+    const ordered: string[] = [];
     for (const line of originalSpeakerText.split(/\r?\n/)) {
       const idx = line.indexOf(": ");
-      if (idx > 0) set.add(line.slice(0, idx));
+      if (idx > 0) {
+        const label = line.slice(0, idx);
+        if (!seen.has(label)) {
+          seen.add(label);
+          ordered.push(label);
+        }
+      }
     }
-    return Array.from(set).sort();
+    return ordered;
   }, [originalSpeakerText]);
 
   const [viewingTranscriptName, setViewingTranscriptName] = useState<string | null>(null);
@@ -434,8 +441,6 @@ export default function Home() {
         credentials: "include",
         body: JSON.stringify({ speakerText: newSpeakerText }),
       });
-      setOriginalSpeakerText(newSpeakerText);
-      setSpeakerRenames({});
       fetchSavedTranscripts();
     } catch {
       // silent
@@ -1138,27 +1143,45 @@ export default function Home() {
               </div>
             )}
 
-            {/* Rename speakers - show whenever there are speaker labels (A, B, C, …) */}
+            {/* Rename speakers - fixed positions, never reorder */}
             {speakerLabels.length >= 1 && (
               <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-4">
                 <h3 className="mb-3 text-sm font-semibold text-zinc-300">Rename speakers</h3>
                 <p className="mb-3 text-xs text-zinc-500">
-                  Change a label to a real name; all lines with that speaker update below.
+                  Type a name to rename. Changes apply instantly and auto-save.
                 </p>
                 <div className="flex flex-wrap gap-x-6 gap-y-3">
-                  {speakerLabels.map((label) => (
-                    <div key={label} className="flex items-center gap-2">
-                      <span className="text-sm text-zinc-400">{label}</span>
-                      <span className="text-zinc-600">→</span>
-                      <input
-                        type="text"
-                        value={speakerRenames[label] ?? ""}
-                        onChange={(e) => handleSpeakerRename(label, e.target.value)}
-                        placeholder="Name"
-                        className="w-32 rounded-lg border border-zinc-600 bg-zinc-950 px-2.5 py-1.5 text-sm text-zinc-200 placeholder-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                      />
-                    </div>
-                  ))}
+                  {speakerLabels.map((label, idx) => {
+                    const currentName = speakerRenames[label] || label;
+                    return (
+                      <div key={idx} className="flex items-center gap-2">
+                        <span className="w-5 text-center text-xs font-mono text-zinc-600">{idx + 1}.</span>
+                        <input
+                          type="text"
+                          value={currentName}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === label) {
+                              const next = { ...speakerRenames };
+                              delete next[label];
+                              setSpeakerRenames(next);
+                              setSpeakerText(applySpeakerRenames(originalSpeakerText, next));
+                              if (viewingTranscriptId) {
+                                if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+                                const id = viewingTranscriptId;
+                                const updated = applySpeakerRenames(originalSpeakerText, next);
+                                saveTimerRef.current = setTimeout(() => { void saveTranscriptToDisk(id, updated); }, 800);
+                              }
+                            } else {
+                              handleSpeakerRename(label, val);
+                            }
+                          }}
+                          placeholder={label}
+                          className="w-36 rounded-lg border border-zinc-600 bg-zinc-950 px-2.5 py-1.5 text-sm text-zinc-200 placeholder-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
