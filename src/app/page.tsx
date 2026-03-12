@@ -1493,6 +1493,35 @@ export default function Home() {
                               : "Word (.docx)"}
                           </button>
                         ))}
+                        <div className="my-1 border-t border-zinc-700" />
+                        <button
+                          type="button"
+                          className="whitespace-nowrap px-4 py-2 text-left text-sm text-red-400 hover:bg-red-950/40 hover:text-red-300"
+                          onClick={async () => {
+                            setSavedDownloadOpenId(null);
+                            if (!confirm(`Delete "${t.originalFileName}"? This cannot be undone.`)) return;
+                            try {
+                              await fetch(`/api/transcripts/${encodeURIComponent(t.id)}`, {
+                                method: "DELETE",
+                                credentials: "include",
+                              });
+                              if (viewingTranscriptId === t.id) {
+                                setViewingTranscriptId(null);
+                                setViewingTranscriptName(null);
+                                setText("");
+                                setSpeakerText("");
+                                setOriginalSpeakerText("");
+                                setSpeakerRenames({});
+                                setTimings(null);
+                              }
+                              fetchSavedTranscripts();
+                            } catch {
+                              // silent
+                            }
+                          }}
+                        >
+                          Delete
+                        </button>
                       </div>
                     )}
                   </div>

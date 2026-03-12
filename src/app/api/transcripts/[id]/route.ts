@@ -71,6 +71,30 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
   }
 }
 
+export async function DELETE(request: NextRequest, { params }: Params): Promise<NextResponse> {
+  const email = getCurrentUser(request);
+  if (!email) {
+    return NextResponse.json({ error: "Sign in to delete transcripts." }, { status: 401 });
+  }
+  const id = params.id;
+  if (!id || !isSafeId(id)) {
+    return NextResponse.json({ error: "Invalid transcript id." }, { status: 400 });
+  }
+
+  const saveDir = getTranscriptSaveDirForUser(getUserId(email));
+  const txtPath = path.join(saveDir, `${id}.txt`);
+  const jsonPath = path.join(saveDir, `${id}.json`);
+
+  let deleted = false;
+  try { await fs.unlink(txtPath); deleted = true; } catch { /* ok */ }
+  try { await fs.unlink(jsonPath); deleted = true; } catch { /* ok */ }
+
+  if (!deleted) {
+    return NextResponse.json({ error: "Transcript not found." }, { status: 404 });
+  }
+  return NextResponse.json({ ok: true });
+}
+
 export async function GET(request: NextRequest, { params }: Params): Promise<NextResponse> {
   const email = getCurrentUser(request);
   if (!email) {
