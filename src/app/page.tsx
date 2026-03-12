@@ -17,6 +17,7 @@ type SavedTranscript = {
   createdAt: string;
   downloadUrl: string;
   speakers?: string[];
+  timings?: JobTimings;
 };
 
 const ACCEPT_AUDIO =
@@ -505,6 +506,14 @@ export default function Home() {
   }, [savedDownloadOpenId]);
 
   const loadSavedTranscript = useCallback(async (t: SavedTranscript) => {
+    if (viewingTranscriptId === t.id) return;
+    // If we already have this transcript's content loaded (e.g. just finished transcribing),
+    // just highlight it without reloading from disk
+    if (viewingTranscriptName === t.originalFileName && speakerText.length > 0) {
+      setViewingTranscriptId(t.id);
+      setTimings(t.timings ?? timings);
+      return;
+    }
     try {
       const res = await fetch(t.downloadUrl, { credentials: "include" });
       if (!res.ok) return;
@@ -514,14 +523,14 @@ export default function Home() {
       setOriginalSpeakerText(bySpeaker);
       setSpeakerText(bySpeaker);
       setSpeakerRenames({});
-      setTimings(null);
+      setTimings(t.timings ?? null);
       setViewingTranscriptName(t.originalFileName);
       setViewingTranscriptId(t.id);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch {
       // ignore
     }
-  }, []);
+  }, [viewingTranscriptId, viewingTranscriptName, speakerText, timings]);
 
   useEffect(() => {
     if (session && typeof session === "object") fetchSavedTranscripts();
@@ -546,6 +555,14 @@ export default function Home() {
       clearTimeout(t2);
     };
   }, [jobState, fetchSavedTranscripts]);
+
+  // Auto-highlight the saved transcript that matches the one we're viewing
+  useEffect(() => {
+    if (viewingTranscriptName && !viewingTranscriptId && savedTranscripts.length > 0) {
+      const match = savedTranscripts.find((t) => t.originalFileName === viewingTranscriptName);
+      if (match) setViewingTranscriptId(match.id);
+    }
+  }, [viewingTranscriptName, viewingTranscriptId, savedTranscripts]);
 
   // Re-render periodically while uploading so "Starting job" appears after 45s if server is slow
   useEffect(() => {
@@ -766,8 +783,7 @@ export default function Home() {
           setSpeakerText(data.result.speakerText);
           setSpeakerRenames({});
           setTimings(data.result.timings ?? null);
-          setViewingTranscriptName(null);
-          setViewingTranscriptId(null);
+          setViewingTranscriptName(jobFileName);
         }
       } catch (err) {
         pollFailuresRef.current = (pollFailuresRef.current ?? 0) + 1;
@@ -1151,37 +1167,25 @@ export default function Home() {
                   Type a name to rename. Changes apply instantly and auto-save.
                 </p>
                 <div className="flex flex-wrap gap-x-6 gap-y-3">
-                  {speakerLabels.map((label, idx) => {
-                    const currentName = speakerRenames[label] || label;
-                    return (
-                      <div key={idx} className="flex items-center gap-2">
-                        <span className="w-5 text-center text-xs font-mono text-zinc-600">{idx + 1}.</span>
-                        <input
-                          type="text"
-                          value={currentName}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (val === label) {
-                              const next = { ...speakerRenames };
-                              delete next[label];
-                              setSpeakerRenames(next);
-                              setSpeakerText(applySpeakerRenames(originalSpeakerText, next));
-                              if (viewingTranscriptId) {
-                                if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-                                const id = viewingTranscriptId;
-                                const updated = applySpeakerRenames(originalSpeakerText, next);
-                                saveTimerRef.current = setTimeout(() => { void saveTranscriptToDisk(id, updated); }, 800);
-                              }
-                            } else {
-                              handleSpeakerRename(label, val);
-                            }
-                          }}
-                          placeholder={label}
-                          className="w-36 rounded-lg border border-zinc-600 bg-zinc-950 px-2.5 py-1.5 text-sm text-zinc-200 placeholder-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                        />
-                      </div>
-                    );
-                  })}
+                  {speakerLabels.map((label, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <span className="text-sm text-zinc-400">{label}</span>
+                      <span className="text-zinc-600">→</span>
+                      <input
+                        type="text"
+                        value={speakerRenames[label] ?? ""}
+                        onChange={(e) => handleSpeakerRename(label, e.target.value)}
+                        onBlur={() => {
+                          if (speakerRenames[label]?.trim()) {
+                            setOriginalSpeakerText(speakerText);
+                            setSpeakerRenames({});
+                          }
+                        }}
+                        placeholder="Name"
+                        className="w-32 rounded-lg border border-zinc-600 bg-zinc-950 px-2.5 py-1.5 text-sm text-zinc-200 placeholder-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -1371,10 +1375,11 @@ export default function Home() {
                 >
                   <button
                     type="button"
-                    onClick={() => loadSavedTranscript(t)}
-                    className="min-w-0 flex-1 text-left"
+                    onClick={() => { if (viewingTranscriptId !== t.id) loadSavedTranscript(t); }}
+                    disabled={viewingTranscriptId === t.id}
+                    className={`min-w-0 flex-1 text-left ${viewingTranscriptId === t.id ? "cursor-default" : ""}`}
                   >
-                    <p className="truncate text-sm font-medium text-zinc-200 hover:text-white" title={`${t.originalFileName} — click to view`}>
+                    <p className="truncate text-sm font-medium text-zinc-200 hover:text-white" title={viewingTranscriptId === t.id ? t.originalFileName : `${t.originalFileName} — click to view`}>
                       {t.originalFileName}
                       {viewingTranscriptId === t.id && (
                         <span className="ml-2 inline-block rounded bg-emerald-800/60 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-emerald-300">

@@ -17,6 +17,7 @@ type TranscriptListItem = {
   createdAt: string;
   downloadUrl: string;
   speakers?: string[];
+  timings?: Record<string, unknown>;
 };
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -59,6 +60,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         bottleneck?: string;
         createdAt: string;
         speakers?: string[];
+        timings?: Record<string, unknown>;
       };
 
       let speakers = data.speakers;
@@ -89,6 +91,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         createdAt: data.createdAt,
         downloadUrl: `/api/transcripts/${encodeURIComponent(data.id)}`,
         speakers,
+        timings: data.timings,
       });
     } catch {
       // skip invalid or unreadable json
