@@ -434,6 +434,8 @@ export default function Home() {
         credentials: "include",
         body: JSON.stringify({ speakerText: newSpeakerText }),
       });
+      setOriginalSpeakerText(newSpeakerText);
+      setSpeakerRenames({});
       fetchSavedTranscripts();
     } catch {
       // silent
@@ -576,6 +578,7 @@ export default function Home() {
         setJobId(stored.jobId);
         setJobState(data.state);
         setJobProgress(data.progress ?? null);
+        if (data.fileInfo) setFileInfo(data.fileInfo);
         if (stored.fileName) setJobFileName(stored.fileName);
         if (data.state === "completed" && data.result) {
           setText(data.result.text);
