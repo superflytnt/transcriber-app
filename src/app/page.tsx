@@ -1277,35 +1277,45 @@ export default function Home() {
               </div>
             )}
 
-            {/* Rename speakers - fixed positions, never reorder */}
+            {/* Rename speakers - collapsible, fixed positions, table layout */}
             {speakerLabels.length >= 1 && (
-              <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-4">
-                <h3 className="mb-3 text-sm font-semibold text-zinc-300">Rename speakers</h3>
-                <p className="mb-3 text-xs text-zinc-500">
-                  Type a name to rename. Changes apply instantly and auto-save.
-                </p>
-                <div className="flex flex-wrap gap-x-6 gap-y-3">
-                  {speakerLabels.map((label, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <span className="text-sm text-zinc-400">{label}</span>
-                      <span className="text-zinc-600">→</span>
-                      <input
-                        type="text"
-                        value={speakerRenames[label] ?? ""}
-                        onChange={(e) => handleSpeakerRename(label, e.target.value)}
-                        onBlur={() => {
-                          if (speakerRenames[label]?.trim()) {
-                            setOriginalSpeakerText(speakerText);
-                            setSpeakerRenames({});
-                          }
-                        }}
-                        placeholder="Name"
-                        className="w-32 rounded-lg border border-zinc-600 bg-zinc-950 px-2.5 py-1.5 text-sm text-zinc-200 placeholder-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                      />
-                    </div>
-                  ))}
+              <details className="rounded-xl border border-zinc-800 bg-zinc-900/40" open>
+                <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-zinc-300 hover:text-zinc-200">
+                  Rename speakers ({speakerLabels.length})
+                </summary>
+                <div className="border-t border-zinc-800 px-4 py-3">
+                  <p className="mb-3 text-xs text-zinc-500">
+                    Type a name to rename. Changes apply instantly and auto-save.
+                  </p>
+                  <table className="w-full">
+                    <tbody>
+                      {speakerLabels.map((label, idx) => (
+                        <tr key={idx}>
+                          <td className="whitespace-nowrap py-1.5 pr-3 text-sm text-zinc-400 align-middle" style={{ width: "1%" }}>
+                            {label}
+                          </td>
+                          <td className="py-1.5 pr-3 text-zinc-600 align-middle" style={{ width: "1%" }}>→</td>
+                          <td className="py-1.5 align-middle">
+                            <input
+                              type="text"
+                              value={speakerRenames[label] ?? ""}
+                              onChange={(e) => handleSpeakerRename(label, e.target.value)}
+                              onBlur={() => {
+                                if (speakerRenames[label]?.trim()) {
+                                  setOriginalSpeakerText(speakerText);
+                                  setSpeakerRenames({});
+                                }
+                              }}
+                              placeholder="Name"
+                              className="w-full max-w-xs rounded-lg border border-zinc-600 bg-zinc-950 px-2.5 py-1.5 text-sm text-zinc-200 placeholder-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              </div>
+              </details>
             )}
 
             {/* Transcript */}
