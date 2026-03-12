@@ -114,6 +114,124 @@ function stripSpeakerLabels(speakerText: string): string {
     .join("\n");
 }
 
+/** Build a Markdown transcript with speaker names as bold headers. */
+function buildMarkdown(speakerText: string, title?: string): string {
+  const lines = speakerText.split(/\r?\n/).filter((l) => l.trim());
+  const parts: string[] = [];
+  if (title) parts.push(`# ${title}`, "");
+  let lastSpeaker = "";
+  for (const line of lines) {
+    const i = line.indexOf(": ");
+    if (i > 0) {
+      const speaker = line.slice(0, i);
+      const text = line.slice(i + 2);
+      if (speaker !== lastSpeaker) {
+        if (lastSpeaker) parts.push("");
+        parts.push(`**${speaker}:**`);
+        lastSpeaker = speaker;
+      }
+      parts.push(text);
+    } else {
+      parts.push(line);
+    }
+  }
+  return parts.join("\n") + "\n";
+}
+
+/** Build CSV with Speaker and Text columns. */
+function buildCsv(speakerText: string): string {
+  const rows = speakerText
+    .split("\n")
+    .filter((line) => line.trim().length > 0)
+    .map((line) => {
+      const i = line.indexOf(": ");
+      const speaker = i > 0 ? line.slice(0, i).trim() : "";
+      const content = i > 0 ? line.slice(i + 2).trim() : line;
+      return `"${speaker.replace(/"/g, '""')}","${content.replace(/"/g, '""')}"`;
+    });
+  return "\uFEFFSpeaker,Text\n" + rows.join("\n");
+}
+
+/** Build JSON with structured speaker data. */
+function buildJson(speakerText: string, timingsData?: JobTimings | null): string {
+  const plain = stripSpeakerLabels(speakerText);
+  const speakers = Array.from(
+    new Set(
+      speakerText.split(/\r?\n/).map((l) => { const i = l.indexOf(": "); return i > 0 ? l.slice(0, i) : ""; }).filter(Boolean)
+    )
+  );
+  const lines = speakerText.split(/\r?\n/).filter((l) => l.trim()).map((line) => {
+    const i = line.indexOf(": ");
+    return { speaker: i > 0 ? line.slice(0, i) : "", text: i > 0 ? line.slice(i + 2) : line };
+  });
+  return JSON.stringify({
+    plainText: plain,
+    speakers,
+    lines,
+    ...(timingsData ? { timings: timingsData } : {}),
+  }, null, 2);
+}
+
+/** Build a professional Word document. */
+async function buildWordBlob(speakerText: string, title?: string): Promise<Blob> {
+  const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle } = await import("docx");
+  const lines = speakerText.split(/\r?\n/).filter((l) => l.trim());
+  const children: InstanceType<typeof Paragraph>[] = [];
+
+  if (title) {
+    children.push(new Paragraph({
+      children: [new TextRun({ text: title, bold: true, size: 36, font: "Calibri" })],
+      heading: HeadingLevel.TITLE,
+      alignment: AlignmentType.LEFT,
+      spacing: { after: 200 },
+    }));
+    children.push(new Paragraph({
+      children: [new TextRun({ text: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }), size: 20, color: "666666", font: "Calibri" })],
+      spacing: { after: 400 },
+    }));
+    children.push(new Paragraph({
+      border: { bottom: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" } },
+      spacing: { after: 300 },
+    }));
+  }
+
+  let lastSpeaker = "";
+  for (const line of lines) {
+    const i = line.indexOf(": ");
+    if (i > 0) {
+      const speaker = line.slice(0, i);
+      const text = line.slice(i + 2);
+      if (speaker !== lastSpeaker) {
+        if (lastSpeaker) children.push(new Paragraph({ spacing: { before: 200 } }));
+        children.push(new Paragraph({
+          children: [new TextRun({ text: speaker, bold: true, size: 22, font: "Calibri", color: "2D7D46" })],
+          spacing: { after: 80 },
+        }));
+        lastSpeaker = speaker;
+      }
+      children.push(new Paragraph({
+        children: [new TextRun({ text, size: 22, font: "Calibri" })],
+        spacing: { after: 60 },
+      }));
+    } else {
+      children.push(new Paragraph({
+        children: [new TextRun({ text: line, size: 22, font: "Calibri" })],
+        spacing: { after: 60 },
+      }));
+    }
+  }
+
+  const doc = new Document({
+    sections: [{
+      properties: {
+        page: { margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } },
+      },
+      children,
+    }],
+  });
+  return Packer.toBlob(doc);
+}
+
 function safeDownloadBasename(fileName: string): string {
   return fileName.replace(/[^a-zA-Z0-9._-]/g, "-").replace(/-+/g, "-").slice(0, 80);
 }
@@ -1209,99 +1327,17 @@ export default function Home() {
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => {
-                      void navigator.clipboard.writeText(speakerText).then(() => setCopiedWhich("speaker"));
-                    }}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                      copiedWhich === "speaker"
-                        ? "bg-emerald-600 text-white"
-                        : "bg-zinc-700 hover:bg-zinc-600"
-                    }`}
+                    onClick={() => { void navigator.clipboard.writeText(speakerText).then(() => setCopiedWhich("speaker")); }}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${copiedWhich === "speaker" ? "bg-emerald-600 text-white" : "bg-zinc-700 hover:bg-zinc-600"}`}
                   >
                     {copiedWhich === "speaker" ? "Copied!" : "Copy"}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => downloadBlob(new Blob([stripSpeakerLabels(speakerText)], { type: "text/plain" }), "transcript-plain.txt")}
-                    className="rounded-lg bg-zinc-700 px-3 py-1.5 text-xs font-medium hover:bg-zinc-600"
-                    title="Text only, no speaker labels"
-                  >
-                    Plain
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => downloadBlob(new Blob([speakerText], { type: "text/plain" }), "transcript.txt")}
-                    className="rounded-lg bg-zinc-700 px-3 py-1.5 text-xs font-medium hover:bg-zinc-600"
-                    title="With speaker labels (A: text)"
-                  >
-                    TXT
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const rows = speakerText
-                        .split("\n")
-                        .filter((line) => line.trim().length > 0)
-                        .map((line) => {
-                          const i = line.indexOf(": ");
-                          const speaker = i > 0 ? line.slice(0, i).trim() : "";
-                          const content = i > 0 ? line.slice(i + 2).trim() : line;
-                          return `"${speaker.replace(/"/g, '""')}","${content.replace(/"/g, '""')}"`;
-                        });
-                      const header = "Speaker,Text\n";
-                      downloadBlob(new Blob(["\uFEFF" + header + rows.join("\n")], { type: "text/csv" }), "transcript.csv");
-                    }}
-                    className="rounded-lg bg-zinc-700 px-3 py-1.5 text-xs font-medium hover:bg-zinc-600"
-                    title="Spreadsheet with Speaker and Text columns"
-                  >
-                    CSV
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const plain = stripSpeakerLabels(speakerText);
-                      const json = JSON.stringify({ plainText: plain, speakerText, ...(timings ? { timings } : {}) }, null, 2);
-                      downloadBlob(new Blob([json], { type: "application/json" }), "transcript.json");
-                    }}
-                    className="rounded-lg bg-zinc-700 px-3 py-1.5 text-xs font-medium hover:bg-zinc-600"
-                    title="JSON with plain text and speaker text"
-                  >
-                    JSON
-                  </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import("docx");
-                        const plain = stripSpeakerLabels(speakerText);
-                        const plainParas = plain
-                          .split(/\r?\n/)
-                          .map((line) => new Paragraph({ children: [new TextRun({ text: line || " " })] }));
-                        const speakerParas = speakerText
-                          .split(/\r?\n/)
-                          .filter((l) => l.trim())
-                          .map((line) => new Paragraph({ children: [new TextRun({ text: line })] }));
-                        const doc = new Document({
-                          sections: [{
-                            children: [
-                              new Paragraph({ text: "Transcript", heading: HeadingLevel.HEADING_1 }),
-                              ...plainParas,
-                              new Paragraph({ text: "" }),
-                              new Paragraph({ text: "With speakers", heading: HeadingLevel.HEADING_1 }),
-                              ...speakerParas,
-                            ],
-                          }],
-                        });
-                        downloadBlob(await Packer.toBlob(doc), "transcript.docx");
-                      } catch (e) {
-                        console.error("Word export failed:", e);
-                      }
-                    }}
-                    className="rounded-lg bg-zinc-700 px-3 py-1.5 text-xs font-medium hover:bg-zinc-600"
-                    title="Word doc with both plain and speaker sections"
-                  >
-                    Word
-                  </button>
+                  <button type="button" onClick={() => downloadBlob(new Blob([stripSpeakerLabels(speakerText)], { type: "text/plain" }), "transcript-plain.txt")} className="rounded-lg bg-zinc-700 px-3 py-1.5 text-xs font-medium hover:bg-zinc-600" title="Text only, no speaker labels">Plain</button>
+                  <button type="button" onClick={() => downloadBlob(new Blob([speakerText], { type: "text/plain" }), "transcript.txt")} className="rounded-lg bg-zinc-700 px-3 py-1.5 text-xs font-medium hover:bg-zinc-600" title="With speaker names">TXT</button>
+                  <button type="button" onClick={() => downloadBlob(new Blob([buildMarkdown(speakerText, viewingTranscriptName ?? jobFileName ?? undefined)], { type: "text/markdown" }), "transcript.md")} className="rounded-lg bg-zinc-700 px-3 py-1.5 text-xs font-medium hover:bg-zinc-600" title="Markdown with speaker names as bold headers">MD</button>
+                  <button type="button" onClick={() => downloadBlob(new Blob([buildCsv(speakerText)], { type: "text/csv" }), "transcript.csv")} className="rounded-lg bg-zinc-700 px-3 py-1.5 text-xs font-medium hover:bg-zinc-600" title="Spreadsheet with Speaker and Text columns">CSV</button>
+                  <button type="button" onClick={() => downloadBlob(new Blob([buildJson(speakerText, timings)], { type: "application/json" }), "transcript.json")} className="rounded-lg bg-zinc-700 px-3 py-1.5 text-xs font-medium hover:bg-zinc-600" title="Structured JSON with speakers, lines, and timings">JSON</button>
+                  <button type="button" onClick={async () => { try { downloadBlob(await buildWordBlob(speakerText, viewingTranscriptName ?? jobFileName ?? "Transcript"), "transcript.docx"); } catch (e) { console.error("Word export failed:", e); } }} className="rounded-lg bg-zinc-700 px-3 py-1.5 text-xs font-medium hover:bg-zinc-600" title="Professional Word document with speaker names">Word</button>
                 </div>
               </div>
               <textarea
@@ -1408,7 +1444,7 @@ export default function Home() {
                     </button>
                     {savedDownloadOpenId === t.id && (
                       <div className="absolute right-0 top-full z-10 mt-1 flex flex-col rounded-lg border border-zinc-700 bg-zinc-800 py-1 shadow-lg">
-                        {(["Plain", "With speakers", "CSV", "JSON", "Word"] as const).map((format) => (
+                        {(["Plain", "With speakers", "Markdown", "CSV", "JSON", "Word"] as const).map((format) => (
                           <button
                             key={format}
                             type="button"
@@ -1425,41 +1461,14 @@ export default function Home() {
                                   downloadBlob(new Blob([plain], { type: "text/plain" }), `${base}.txt`);
                                 } else if (format === "With speakers") {
                                   downloadBlob(new Blob([bySpeaker], { type: "text/plain" }), `${base}-speakers.txt`);
+                                } else if (format === "Markdown") {
+                                  downloadBlob(new Blob([buildMarkdown(bySpeaker, t.originalFileName)], { type: "text/markdown" }), `${base}.md`);
                                 } else if (format === "CSV") {
-                                  const rows = bySpeaker
-                                    .split("\n")
-                                    .filter((line) => line.trim().length > 0)
-                                    .map((line) => {
-                                      const i = line.indexOf(": ");
-                                      const speaker = i > 0 ? line.slice(0, i).trim() : "";
-                                      const content = i > 0 ? line.slice(i + 2).trim() : line;
-                                      return `"${speaker.replace(/"/g, '""')}","${content.replace(/"/g, '""')}"`;
-                                    });
-                                  downloadBlob(
-                                    new Blob(["\uFEFFSpeaker,Text\n" + rows.join("\n")], { type: "text/csv" }),
-                                    `${base}.csv`
-                                  );
+                                  downloadBlob(new Blob([buildCsv(bySpeaker)], { type: "text/csv" }), `${base}.csv`);
                                 } else if (format === "JSON") {
-                                  downloadBlob(
-                                    new Blob([JSON.stringify({ plainText: plain, speakerText: bySpeaker }, null, 2)], { type: "application/json" }),
-                                    `${base}.json`
-                                  );
+                                  downloadBlob(new Blob([buildJson(bySpeaker)], { type: "application/json" }), `${base}.json`);
                                 } else {
-                                  const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import("docx");
-                                  const plainParas = plain.split(/\r?\n/).map((line) => new Paragraph({ children: [new TextRun({ text: line || " " })] }));
-                                  const speakerParas = bySpeaker.split(/\r?\n/).filter((l) => l.trim()).map((line) => new Paragraph({ children: [new TextRun({ text: line })] }));
-                                  const doc = new Document({
-                                    sections: [{
-                                      children: [
-                                        new Paragraph({ text: "Transcript", heading: HeadingLevel.HEADING_1 }),
-                                        ...plainParas,
-                                        new Paragraph({ text: "" }),
-                                        new Paragraph({ text: "With speakers", heading: HeadingLevel.HEADING_1 }),
-                                        ...speakerParas,
-                                      ],
-                                    }],
-                                  });
-                                  downloadBlob(await Packer.toBlob(doc), `${base}.docx`);
+                                  downloadBlob(await buildWordBlob(bySpeaker, t.originalFileName), `${base}.docx`);
                                 }
                               } catch (e) {
                                 console.error("Download failed:", e);
@@ -1468,6 +1477,7 @@ export default function Home() {
                           >
                             {format === "Plain" ? "Plain text (.txt)"
                               : format === "With speakers" ? "With speakers (.txt)"
+                              : format === "Markdown" ? "Markdown (.md)"
                               : format === "CSV" ? "Spreadsheet (.csv)"
                               : format === "JSON" ? "JSON (.json)"
                               : "Word (.docx)"}
