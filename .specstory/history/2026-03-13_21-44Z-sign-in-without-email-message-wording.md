@@ -10,3 +10,938 @@ Is "sign in without email" really the right message? Feels kind of like a bizarr
 
 ---
 
+_**Agent (model default, mode Agent)**_
+
+<think><details><summary>Thought Process</summary>
+
+The user is pointing out that the login screen has a confusing UX: it prominently asks for email, shows "Send login link" (email-based flow), and then has a button "Sign in without email" — which feels contradictory since the whole screen is about entering your email.
+
+The user is saying the message "Sign in without email" is implying something other than what it actually does. So I need to:
+
+1. Find where this button/label lives in the codebase
+2. Understand what "Sign in without email" actually does (likely magic link vs. some other auth method, or maybe it's "continue without saving" or "use as guest"?)
+3. Propose and implement a clearer label that matches the actual behavior
+
+Let me search for this text and understand the auth flow.
+</details></think>
+
+---
+
+
+Searching the codebase for where that label is used and what the button does.
+
+
+---
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search">
+<details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+
+Parameters:
+
+```json
+{
+  "pattern": "Sign in without email|without email",
+  "path": "/Users/sethkaplan/Library/Mobile Documents/com~apple~CloudDocs/~MY APPS/Transcriber2/transcriber-app",
+  "caseInsensitive": false
+}
+```
+Additional data:
+
+```json
+{
+  "isPruned": true,
+  "pattern": "Sign in without email|without email",
+  "path": "/Users/sethkaplan/Library/Mobile Documents/com~apple~CloudDocs/~MY APPS/Transcriber2/transcriber-app",
+  "outputMode": "content",
+  "totalFiles": 2,
+  "totalMatches": 2,
+  "topFiles": [
+    {
+      "uri": "src/app/api/auth/dev-sign-in/route.ts",
+      "matchCount": 1
+    },
+    {
+      "uri": "src/app/page.tsx",
+      "matchCount": 1
+    }
+  ]
+}
+```
+Status: **completed**
+
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search">
+<details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+
+Parameters:
+
+```json
+{
+  "pattern": "Send login link",
+  "path": "/Users/sethkaplan/Library/Mobile Documents/com~apple~CloudDocs/~MY APPS/Transcriber2/transcriber-app",
+  "caseInsensitive": false
+}
+```
+Additional data:
+
+```json
+{
+  "isPruned": true,
+  "pattern": "Send login link",
+  "path": "/Users/sethkaplan/Library/Mobile Documents/com~apple~CloudDocs/~MY APPS/Transcriber2/transcriber-app",
+  "outputMode": "content",
+  "totalFiles": 2,
+  "totalMatches": 2,
+  "topFiles": [
+    {
+      "uri": "src/app/page.tsx",
+      "matchCount": 1
+    },
+    {
+      "uri": "e2e/upload.spec.ts",
+      "matchCount": 1
+    }
+  ]
+}
+```
+Status: **completed**
+
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+So "Sign in without email" is in `src/app/page.tsx` and it's tied to a dev sign-in flow (from `api/auth/dev-sign-in`). So the button actually means: sign in without *sending* an email (no magic link email) — i.e. instant sign-in for dev/convenience, using the email that's already in the field. The user is right: "Sign in without email" sounds like "sign in without providing an email" which is wrong. It should say something like "Sign in without sending email" or "Sign in now (no email sent)" or "Use this email without sending a link".
+
+Let me read the page and the dev-sign-in route to confirm the behavior and pick the best label.
+</details></think>
+
+---
+
+
+
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/sethkaplan/Library/Mobile Documents/com~apple~CloudDocs/~MY APPS/Transcriber2/transcriber-app/src/app/api/auth/dev-sign-in/route.ts</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/sethkaplan/Library/Mobile Documents/com~apple~CloudDocs/~MY APPS/Transcriber2/transcriber-app/src/app/page.tsx</summary>
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+Now I understand. The flow is:
+
+1. **Send login link** – sends a magic link email to the address in the field (normal flow).
+2. **Sign in without email** – uses the email in the field but does **not** send any email; it just creates a session for that email (dev/convenience so you can use the app on Railway or locally without email delivery).
+
+So "Sign in without email" is misleading because:
+- It sounds like "you don't need to enter/use an email" (wrong — you do use the email in the field).
+- What it actually means: "Sign in using this email without sending a login link" or "Sign in now (no email sent)".
+
+Better labels could be:
+- "Sign in now (no email sent)" – clear that you still use the email, but no email is sent
+- "Use this email without sending a link" – a bit long
+- "Sign in with this email only" – could work
+- "Skip email — sign in with this address" – still a bit confusing
+- "Sign in without sending a link" – accurate: you're not sending the magic link
+
+I'll go with something that makes the distinction clear: the primary action sends an email; the secondary action uses the email in the box but doesn't send anything. So:
+- **"Sign in without sending a link"** – clear: you still need the email, we just don't send the link.
+- Or **"Sign in now (no link sent)"** – same idea.
+
+I'll use "Sign in without sending a link" so it's explicit that we're talking about the link/email not being sent, not the email field being optional.
+</details></think>
+
+---
+
+
+Confirming: the button uses the email in the field but doesn't send a magic link (dev/convenience). "Sign in without email" implies no email is needed. Updating the label to state we're not sending the link.
+
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="edit_file_v2">
+
+<details><summary>Tool use: **edit_file_v2** • Edit file: /Users/sethkaplan/Library/Mobile Documents/com~apple~CloudDocs/~MY APPS/Transcriber2/transcriber-app/src/app/page.tsx</summary>
+
+</details>
+
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+Good. I should also check if the e2e tests reference this button text.
+</details></think>
+
+---
+
+
+
+
+
+---
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search">
+<details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+
+Parameters:
+
+```json
+{
+  "pattern": "Sign in without|devSignIn|dev-sign-in",
+  "path": "/Users/sethkaplan/Library/Mobile Documents/com~apple~CloudDocs/~MY APPS/Transcriber2/transcriber-app",
+  "caseInsensitive": false
+}
+```
+Additional data:
+
+```json
+{
+  "isPruned": true,
+  "pattern": "Sign in without|devSignIn|dev-sign-in",
+  "path": "/Users/sethkaplan/Library/Mobile Documents/com~apple~CloudDocs/~MY APPS/Transcriber2/transcriber-app",
+  "outputMode": "content",
+  "totalFiles": 2,
+  "totalMatches": 3,
+  "topFiles": [
+    {
+      "uri": ".specstory/history/2026-03-13_21-44Z-sign-in-without-email-message-wording.md",
+      "matchCount": 1
+    },
+    {
+      "uri": "src/app/page.tsx",
+      "matchCount": 2
+    }
+  ]
+}
+```
+Status: **completed**
+
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="unknown" data-tool-name="read_lints">
+<details>
+<summary>Tool use: **read_lints**</summary>
+
+
+Parameters:
+
+```json
+{
+  "paths": [
+    "/Users/sethkaplan/Library/Mobile Documents/com~apple~CloudDocs/~MY APPS/Transcriber2/transcriber-app/src/app/page.tsx"
+  ]
+}
+```
+Result:
+
+```json
+{
+  "linterErrorsByFile": [
+    {
+      "relativeWorkspacePath": "/Users/sethkaplan/Library/Mobile Documents/com~apple~CloudDocs/~MY APPS/Transcriber2/transcriber-app/src/app/page.tsx"
+    }
+  ]
+}
+```
+Status: **completed**
+
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+No e2e tests reference the exact button text "Sign in without email". The .specstory file is just history. Lint is clean.
+
+Per the rules I need to: build, run the app, hit the flow, and capture proof (screenshot). Let me do that.
+</details></think>
+
+---
+
+
+Verifying the change: building, starting the app, and capturing the login screen.
+
+
+---
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_command_v2">
+<details><summary>Tool use: **run_terminal_command_v2** • Run command: cd "/Users/sethkaplan/Library/Mobile Documents/com~apple~CloudDocs/~MY APPS/Transcriber2/transcriber-app" && npm run build</summary>
+
+```bash
+cd "/Users/sethkaplan/Library/Mobile Documents/com~apple~CloudDocs/~MY APPS/Transcriber2/transcriber-app" && npm run build
+```
+
+```
+
+&gt; transcriber-app@0.1.0 build
+&gt; next build
+
+  ▲ Next.js 14.2.35
+  - Environments: .env
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+
+./src/app/page.tsx
+919:6  Warning: React Hook useEffect has missing dependencies: 'fileInfo' and 'jobFileName'. Either include them or remove the dependency array. You can also replace multiple useState variables with useReducer if 'setViewingTranscriptName' needs the current value of 'jobFileName'.  react-hooks/exhaustive-deps
+
+info  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/basic-features/eslint#disabling-rules
+   Collecting page data ...
+   Generating static pages (0/19) ...
+   Generating static pages (4/19) 
+   Generating static pages (9/19) 
+   Generating static pages (14/19) 
+ ✓ Generating static pages (19/19)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                              Size     First Load JS
+┌ ○ /                                    11.3 kB         107 kB
+├ ○ /_not-found                          875 B          88.2 kB
+├ ○ /admin                               2.65 kB        98.7 kB
+├ ƒ /api/admin/delete-user               0 B                0 B
+├ ƒ /api/admin/resend-link               0 B                0 B
+├ ƒ /api/admin/set-admin                 0 B                0 B
+├ ƒ /api/admin/users                     0 B                0 B
+├ ○ /api/auth/dev-available              0 B                0 B
+├ ƒ /api/auth/dev-sign-in                0 B                0 B
+├ ƒ /api/auth/logout                     0 B                0 B
+├ ƒ /api/auth/send-link                  0 B                0 B
+├ ƒ /api/auth/session                    0 B                0 B
+├ ƒ /api/auth/test-session               0 B                0 B
+├ ƒ /api/auth/verify-code                0 B                0 B
+├ ƒ /api/jobs                            0 B                0 B
+├ ƒ /api/jobs/[id]                       0 B                0 B
+├ ƒ /api/transcripts                     0 B                0 B
+├ ƒ /api/transcripts/[id]                0 B                0 B
+└ ƒ /auth/verify                         143 B          87.5 kB
++ First Load JS shared by all            87.4 kB
+  ├ chunks/117-9776bcfde68b9ed6.js       31.7 kB
+  ├ chunks/fd9d1056-88c8a1669018f964.js  53.7 kB
+  └ other shared chunks (total)          1.97 kB
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+ ⚠ Compiled with warnings
+
+./node_modules/fluent-ffmpeg/lib/options/misc.js
+Critical dependency: the request of a dependency is an expression
+
+Import trace for requested module:
+./node_modules/fluent-ffmpeg/lib/options/misc.js
+./node_modules/fluent-ffmpeg/lib/fluent-ffmpeg.js
+./node_modules/fluent-ffmpeg/index.js
+./src/lib/chunker.ts
+./src/app/api/jobs/route.ts
+
+
+```
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+Build passed. Now start dev server and open the login page to capture a snapshot. Per env-and-deploy I need to use port 3000. Let me check if something is on 3000 first, then start dev.
+</details></think>
+
+---
+
+
+
+
+
+---
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_command_v2">
+<details><summary>Tool use: **run_terminal_command_v2** • Run command: lsof -ti :3000 2>/dev/null || true</summary>
+
+```bash
+lsof -ti :3000 2>/dev/null || true
+```
+
+```
+82589
+83229
+
+```
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+Port 3000 is in use. I could kill it and start fresh, but the dev server might already be running with the old code. Let me start the dev server - the rules say the dev script already kills port 3000. Let me check package.json for the dev script.
+</details></think>
+
+---
+
+
+
+
+
+---
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search">
+<details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+
+Parameters:
+
+```json
+{
+  "pattern": "\"dev\":",
+  "path": "/Users/sethkaplan/Library/Mobile Documents/com~apple~CloudDocs/~MY APPS/Transcriber2/transcriber-app/package.json",
+  "contextAfter": 1,
+  "caseInsensitive": false
+}
+```
+Additional data:
+
+```json
+{
+  "isPruned": true,
+  "pattern": "\"dev\":",
+  "path": "/Users/sethkaplan/Library/Mobile Documents/com~apple~CloudDocs/~MY APPS/Transcriber2/transcriber-app/package.json",
+  "outputMode": "content",
+  "totalFiles": 1,
+  "totalMatches": 1,
+  "topFiles": [
+    {
+      "uri": "package.json",
+      "matchCount": 2
+    }
+  ]
+}
+```
+Status: **completed**
+
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+The dev script kills port 3000 then starts. I'll run npm run dev in background, wait for it to be up, then use the browser to load the login page and take a snapshot.
+</details></think>
+
+---
+
+
+
+
+
+---
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_command_v2">
+<details><summary>Tool use: **run_terminal_command_v2** • Run command: cd "/Users/sethkaplan/Library/Mobile Documents/com~apple~CloudDocs/~MY APPS/Transcriber2/transcriber-app" && npm run dev</summary>
+
+```bash
+cd "/Users/sethkaplan/Library/Mobile Documents/com~apple~CloudDocs/~MY APPS/Transcriber2/transcriber-app" && npm run dev
+```
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+Let me wait a few seconds for the server to be ready, then use the browser MCP to navigate and take a snapshot. I need to check the browser MCP tool schema first per the instructions.
+</details></think>
+
+---
+
+
+
+
+
+---
+
+<tool-use data-tool-type="generic" data-tool-name="glob_file_search">
+<details>
+<summary>Tool use: **glob_file_search** • Searched codebase "undefined" • **33** results in **1** directory</summary>
+
+Directory: **/Users/sethkaplan/.cursor/projects/Users-sethkaplan-Library-Mobile-Documents-com-apple-CloudDocs-MY-APPS-Transcriber2-transcriber-app/mcps/cursor-ide-browser/tools** (33 files)
+
+| File |
+|------|
+| `browser_profile_stop.json` |
+| `browser_profile_start.json` |
+| `browser_unlock.json` |
+| `browser_lock.json` |
+| `browser_search.json` |
+| `browser_take_screenshot.json` |
+| `browser_tabs.json` |
+| `browser_network_requests.json` |
+| `browser_console_messages.json` |
+| `browser_resize.json` |
+| `browser_handle_dialog.json` |
+| `browser_drag.json` |
+| `browser_highlight.json` |
+| `browser_get_bounding_box.json` |
+| `browser_is_checked.json` |
+| `browser_is_enabled.json` |
+| `browser_is_visible.json` |
+| `browser_get_input_value.json` |
+| `browser_get_attribute.json` |
+| `browser_scroll.json` |
+| `browser_reload.json` |
+| `browser_navigate_forward.json` |
+| `browser_navigate_back.json` |
+| `browser_wait_for.json` |
+| `browser_press_key.json` |
+| `browser_select_option.json` |
+| `browser_hover.json` |
+| `browser_fill_form.json` |
+| `browser_fill.json` |
+| `browser_type.json` |
+| `browser_click.json` |
+| `browser_snapshot.json` |
+| `browser_navigate.json` |
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+I need browser_navigate and browser_snapshot. Let me read their schemas.
+</details></think>
+
+---
+
+
+
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/sethkaplan/.cursor/projects/Users-sethkaplan-Library-Mobile-Documents-com-apple-CloudDocs-MY-APPS-Transcriber2-transcriber-app/mcps/cursor-ide-browser/tools/browser_navigate.json</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/sethkaplan/.cursor/projects/Users-sethkaplan-Library-Mobile-Documents-com-apple-CloudDocs-MY-APPS-Transcriber2-transcriber-app/mcps/cursor-ide-browser/tools/browser_snapshot.json</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/sethkaplan/.cursor/projects/Users-sethkaplan-Library-Mobile-Documents-com-apple-CloudDocs-MY-APPS-Transcriber2-transcriber-app/mcps/cursor-ide-browser/tools/browser_tabs.json</summary>
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+Server is starting. Let me wait 3–4 seconds then navigate to localhost:3000 and take a snapshot (and optionally screenshot for evidence). I'll use call_mcp_tool for the browser.
+</details></think>
+
+---
+
+
+
+
+
+---
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_command_v2">
+<details><summary>Tool use: **run_terminal_command_v2** • Run command: sleep 4 && curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/</summary>
+
+```bash
+sleep 4 && curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/
+```
+
+```
+200
+```
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+Server is up. Now navigate to the login page and take a snapshot with screenshot for evidence.
+</details></think>
+
+---
+
+
+
+
+
+---
+
+<tool-use data-tool-type="unknown" data-tool-name="mcp-cursor-ide-browser-cursor-ide-browser-browser_navigate">
+<details>
+<summary>Tool use: **mcp-cursor-ide-browser-cursor-ide-browser-browser_navigate**</summary>
+
+
+Parameters:
+
+```json
+{
+  "tools": [
+    {
+      "name": "browser_navigate",
+      "parameters": "{\"url\":\"http://localhost:3000\",\"take_screenshot_afterwards\":true}",
+      "serverName": "cursor-ide-browser"
+    }
+  ]
+}
+```
+Additional data:
+
+```json
+{
+  "status": "success"
+}
+```
+Result:
+
+```json
+{
+  "result": "{\"content\":[{\"type\":\"text\",\"text\":\"### Action: snapshot\\n- Total refs: 6\\n- Interactive refs: 3\\n- Browser View ID: e91cf8\\n\\n### Page state\\n- Page URL: http://localhost:3000/\\n- Page Title: Transcriber\\n- Page Snapshot:\\n&#96;&#96;&#96;yaml\\n- role: document\\n  name: Transcriber\\n  ref: root\\n  children:\\n    - role: textbox\\n      name: Email\\n      ref: e0\\n      placeholder: you@example.com\\n    - role: button\\n      name: Send login link\\n      ref: e1\\n    - role: button\\n      name: Sign in without sending a link\\n      ref: e2\\n    - role: heading\\n      name: Transcriber\\n      ref: e3\\n      level: 1\\n      name: Sign in to upload and save transcripts.\\n      ref: e4\\n      name: Email\\n      ref: e5\\n&#96;&#96;&#96;\"},{\"type\":\"text\",\"text\":\"{\\\"type\\\":\\\"metadata\\\",\\\"viewId\\\":\\\"e91cf8\\\",\\\"title\\\":\\\"Transcriber\\\",\\\"url\\\":\\\"http://localhost:3000/\\\",\\\"locked\\\":false}\"},{\"type\":\"image\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAAdUAAAQACAYAAAC3csPMAACUCklEQVR4AezBC7imd13f68/vP2utmUwymRCCINlgqZVDEmjYFdxAAEFRm2qEULAQORTUFoHuXhb0aqUUtVhQqBU5FQsbFIhoqdqqF5sKLbQih3LaYglBOSYaCYkkmfOs9X73u55/1jzzzqw3kviEaPK57zrllFODJEn6S2tIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hIkqRJNCRJ0iQakiRpEg1JkjSJhiRJmkRDkiRNoiFJkibRkCRJk2hI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SVpiIEmSlhhIkqQlBpIkaYmBJElaYiBJkpYYSJKkJQaSJGmJgSRJWmIgSZKWGEiSpCUGkiRpiYEkSVpiIEmSlhhIkqQlBpIkaYmBJElaYiBJkpYYSJKkJQaSJGmJgSRJWmIgSZKWGEiSpCUGkiRpiYEkSVpiIEmSlhhIkqQlBpIkaYmBJElaYiBJkpYYSJKkJQaSJGmJgSRJWmIgSZKWGEiSpCUGkiRpiYEkSVpiIEmSlhhIkqQlBpIkaYmBJElaYiBJkpYYSJKkJQaSJGmJgSRJWmIgSZKWGEiSpCUGkiRpiYEkSVpiIEmSlhhIkqQlBpIkaYmBJElaYiBJkpYYSJKkJQaSJGmJgSRJWmIgSZKWGEiSpCUGkiRpiYEkSVpiIEmSlhhIkqQlBpIkaYmBJElaYiBJkpYYSJKkJQaSJGmJgSRJWmIgSZKWGEiSpCUGkiRpiYEkSVpiIEmSlhhIkqQlBpIkaYmBJElaYiBJkpYYSJKkJQaSJGmJgSRJWmIgSZKWGEiSpCUGkiRpiYEkSVpiIEmSlhhIkqQlBpIkaYmBJElaYiBJkpYYSJKkJQaSJGmJgSRJWmIgSZKWGEiSpCUGkiRpiYEkSVpiIEmSlhhIkqQlBpIkaYmBJElaYiBJkpYYSJKkJQaSJGmJgSRJWmIgSZKWGEiSpCUGkiRpiYEkSVpiIEmSlhhIkqQlBpIkaYmBJElaYiBJkpYYSJKkJQaSJGmJgSRJWmIgSZKWGEiSpCUGkiRpiYEkSVpiIEmSlhhIkqQlBpIkaYmBJElaYiBJkpYYSJKkJQaSJGmJgSRJWmIgSZKWGEiSpCUGkiRpiYEkSVpiIEmSlhhIkqQlBpIkaYmBJElaYiBJkpYYSJKkJQaSJGmJgSRJWmIgSZKWGEiSpCUGkiRpiYEkSVpiIEmSlhhIkqQlBpIkaYmBJElaYiBJkpYYSJKkJQaSJGmJgSRJWmIgSZKWGEiSpCUGkiRpiYEkSVpiIEmSlhhIkqQlBpIkaYmBJElaYiBJkpYYSJKkJQaSJGmJgSRJWmIgSZKWGEiSpCUGkiRpiYEkSVpiIEmSlhhIkqQlBpIkaYmBJElaYiBJkpYYSJKkJQaSJGmJgSRJWmIgSZKWGEiSpCUGkiRpiYEkSVpiIEmSlhhIkqQlBpIkaYmBJElaYiBJkpYYSJKkJQaSJGmJgSRJWmIgSZKWGEiSpCUGkiRpiYEkSVpiIEmSlhhIkqQlBpIkaYmBJElaYiBJkpYYSJKkJQaSJGmJgSRJWmIgSZKWGEiSpCUGkiRpiYEkSVpiIEmSlhhIkqQlBpIkaYmBJElaYiBJkpYYSJKkJQaSJGmJgSRJWmIgSZKWGEiSpCUGkiRpiYEkSVpiIEmSlvi/HILz6ICscC0AAAAASUVORK5CYII=\",\"mimeType\":\"image/png\"}]}"
+}
+```
+Status: **completed**
+
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+The snapshot and screenshot confirm the change. The button now reads "Sign in without sending a link" and the page shows:
+- Send login link (primary)
+- Sign in without sending a link (secondary)
+
+So the fix is in place and verified. The new label makes it clear you still use the email in the field; the only difference is we don't send a link. I've satisfied the rules: build passed, app ran, I exercised the same path (opened app at localhost:3000), and I have a snapshot/screenshot as evidence.
+</details></think>
+
+---
+
+
+Summary of what was wrong and what was changed:
+
+**What was wrong**  
+The button label **"Sign in without email"** suggested you don’t need to use an email at all, while the screen clearly asks for an email and the action still uses the address in the field. So the copy was misleading.
+
+**What the button actually does**  
+It signs you in using the email you entered, but **does not send** a magic-link email. So the distinction is “no link sent,” not “no email used.”
+
+**Change made**  
+The label was updated from **"Sign in without email"** to **"Sign in without sending a link"** in `src/app/page.tsx`.
+
+So the flow is now:
+
+- **Send login link** — send a magic link to the email in the field.
+- **Sign in without sending a link** — sign in with that same email and skip sending any email.
+
+Build passed, the app was opened at http://localhost:3000, and the login screen shows the new button text: “Sign in without sending a link.”
+
+---
+
+_**User**_
+
+I don't like that the process logs you in as a new user immediately, with no verification of your email address. Seems like that's ripe for spam. Could it be like a "Register new email address", and then you click it and a message pops up that says, "Check your inbox for magic link and instructions" or something like that ? Does that make sense? 
+
+---
+
+_**Agent (model default, mode Agent)**_
+
+<think><details><summary>Thought Process</summary>
+
+The user wants to change the "Sign in without sending a link" flow so it doesn't immediately log you in as a new user (which could be abused for spam - anyone could "register" any email without verification). Instead they want:
+
+1. Change the button to something like "Register new email address"
+2. When you click it, instead of immediately signing in via dev-sign-in, it should send the magic link (like the main flow) and show a message like "Check your inbox for magic link and instructions"
+
+So effectively: the "dev sign in" / instant sign-in path would go away or change. The "Register new email address" would trigger the same flow as "Send login link" - i.e. send the magic link email - and then show a confirmation message.
+
+Let me re-read to be sure:
+- "I don't like that the process logs you in as a new user immediately, with no verification" - they're objecting to the dev-sign-in behavior (instant session with no email verification)
+- "Could it be like a 'Register new email address', and then you click it and a message pops up that says, 'Check your inbox for magic link and instructions'" - so the button becomes "Register new email address", and on click we send the magic link (same as Send login link) and show a popup/message saying check your inbox
+
+So the flow would be:
+1. User enters email
+2. Two buttons: "Send login link" (existing) and "Register new email address" (replacing "Sign in without sending a link")
+3. Clicking "Register new email address" → call send-link API (same as the other button), then show a message like "Check your inbox for magic link and instructions"
+
+Wait - that would make both buttons do the same thing (send the magic link). So maybe the distinction is:
+- "Send login link" - for existing users / you already have an account, get a link
+- "Register new email address" - for new users, we send the same magic link but the copy is "you're registering, check your inbox for magic link and instructions"
+
+Functionally they could both call the same send-link API. The difference is just the label and the message shown after. So:
+1. Replace the second button with "Register new email address"
+2. On click: call send-link (same API as Send login link), then show message "Check your inbox for magic link and instructions" (or similar)
+3. Remove the dev-sign-in flow from the UI entirely? Or keep it only in development? The user said they don't like that it logs you in immediately with no verification - so they want to get rid of that behavior. So we'd remove the instant sign-in and replace it with "Register new email address" that sends the link and shows the message.
+
+Let me check the codebase:
+- handleSendLink sends the magic link and then presumably shows "check your email" UI
+- handleDevSignIn calls dev-sign-in and logs in immediately
+
+So the change would be:
+1. Remove the dev-sign-in button / handler from the login form (or keep the API for internal/dev use but hide the button in production - but user said they don't like the behavior, so I'll assume we're replacing it entirely).
+2. Add a "Register new email address" button that:
+   - Uses the same send-link API (so we're not creating a new backend)
+   - After success, shows a message like "Check your inbox for magic link and instructions" - this might be the same as the existing "Check your email" flow, or a small variant (e.g. a toast or inline message with that text).
+
+Looking at the existing flow: when you click "Send login link", it sends the link and then the UI switches to "Check your email" with the 6-digit code option. So both buttons could do the same backend action; "Register new email address" could just be a different label and maybe we show the same "Check your email" screen with slightly different copy (e.g. "We sent a sign-in link to ... Check your inbox for the magic link and instructions.").
+
+Let me read the page.tsx to see the exact flow for handleSendLink and the "Check your email" state.
+</details></think>
+
+---
+
+
+Replacing the instant sign-in (no verification) with a "Register new email address" flow that sends the magic link and shows "Check your inbox for magic link and instructions." Checking the current send-link and post-send flow.
+
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/sethkaplan/Library/Mobile Documents/com~apple~CloudDocs/~MY APPS/Transcriber2/transcriber-app/src/app/page.tsx</summary>
+
+</details>
+</tool-use>
+
+---
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search">
+<details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+
+Parameters:
+
+```json
+{
+  "pattern": "handleSendLink|handleDevSignIn|pendingEmail|setPendingEmail",
+  "path": "/Users/sethkaplan/Library/Mobile Documents/com~apple~CloudDocs/~MY APPS/Transcriber2/transcriber-app/src/app/page.tsx",
+  "caseInsensitive": false
+}
+```
+Additional data:
+
+```json
+{
+  "isPruned": true,
+  "pattern": "handleSendLink|handleDevSignIn|pendingEmail|setPendingEmail",
+  "path": "/Users/sethkaplan/Library/Mobile Documents/com~apple~CloudDocs/~MY APPS/Transcriber2/transcriber-app/src/app/page.tsx",
+  "outputMode": "content",
+  "totalFiles": 1,
+  "totalMatches": 8,
+  "topFiles": [
+    {
+      "uri": "src/app/page.tsx",
+      "matchCount": 8
+    }
+  ]
+}
+```
+Status: **completed**
+
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+Now I understand the full picture:
+
+1. **Send login link** – calls send-link, on success goes to step "check-email" (shows "Check your email" with magic link + 6-digit code).
+2. **Sign in without sending a link** – calls dev-sign-in, immediately creates session (no verification). Only shown when `showDevSignIn` is true, which is set when email is not configured (503 / EMAIL_NOT_CONFIGURED). So actually the dev sign-in button is only visible when the server can't send email! Let me double-check...
+
+Looking at the code again:
+- `showDevSignIn` starts as false
+- It's set to true only when `isNotConfigured` (send-link returns 503 or email not configured)
+- So the second button is always rendered - but the user said they don't like that it logs you in immediately. So they want to remove that behavior entirely and replace it with "Register new email address" that sends the link and shows the message.
+
+So the plan:
+1. Replace the second button with "Register new email address".
+2. When clicked: call the same send-link API (handleSendLink). So we can reuse handleSendLink for both buttons - both "Send login link" and "Register new email address" do the same thing: send the magic link. The only difference is the button label.
+3. After success we already go to "Check your email" with "We sent a sign-in link to ... Click the link in that email to sign in, or enter the 6-digit code below." The user asked for a message like "Check your inbox for magic link and instructions" - we could either:
+   - Use the same check-email step and maybe tweak the copy when they came from "Register" vs "Send login link", or
+   - Keep one check-email screen and optionally add a line like "Check your inbox for the magic link and instructions." to the existing copy.
+
+Actually re-reading the user message: "you click it and a message pops up that says, 'Check your inbox for magic link and instructions'" - they want a message that pops up. So maybe they want a modal or toast that says that, rather than navigating to the check-email screen? Or they're fine with the check-email screen as the "message" that pops up (the next view). I'll interpret it as: after clicking "Register new email address", we send the link and show the same "Check your email" screen, and we can make the copy say something like "Check your inbox for the magic link and instructions" (or keep the current copy which already says we sent a sign-in link and to click the link or enter the code - that's already "instructions"). I'll add a short line like "Check your inbox for the magic link and instructions." to the check-email screen when appropriate, or we could have two variants of the check-email copy - one for "Send login link" and one for "Register". Simpler: one screen, one copy. Update the check-email copy to include "Check your inbox for the magic link and instructions." so it's clear.
+
+Let me also check: when email is NOT configured, we currently show the dev sign-in button (setShowDevSignIn(true)). If we remove dev sign-in, then when email is not configured the user would only see "Send login link" and "Register new email address" - both would try to send and both would get the same 503 error. So we'd have two buttons that do the same thing. That's a bit redundant. So:
+- Primary: "Send login link" – send magic link
+- Secondary: "Register new email address" – also send magic link (same API), same success flow
+
+So both buttons do the same backend action. We could either:
+A) Two buttons, same action (redundant but clear intent - "register" might be for first-time users)
+B) One button "Send login link" and remove the second button entirely - but then we lose "Register new email address"
+
+The user specifically asked for "Register new email address" and then a message "Check your inbox for magic link and instructions". So they want the second button to be "Register new email address" and it should send the link and show that message. So we need both buttons; both call send-link; we can show the same check-email screen. Optionally we could show a toast when they click "Register" that says "Check your inbox for magic link and instructions" and then transition to check-email - but that might be redundant since the check-email screen already explains that. I'll make "Register new email address" call handleSendLink (same as Send login link), so both lead to the same "Check your email" screen. I'll add one line to that screen: "Check your inbox for the magic link and instructions." to match the user's request.
+
+Implementing:
+1. Remove handleDevSignIn and dev-sign-in usage from the login form (remove the instant sign-in button).
+2. Add "Register new email address" button that calls handleSendLink (same as Send login link).
+3. When showDevSignIn is set (email not configured), we currently show the dev sign-in button. If we remove it, we need to decide: do we show "Register new email address" when email is not configured? It would still fail with "This server can't send email yet." So we could show "Register new email address" always, and when email isn't configured both buttons would show the same error. Or we could show "Register new email address" only when email IS configured (so we don't have two buttons that do the same failing action). Simplest: always show "Register new email address" as the second button; it does the same as Send login link. When email isn't configured, both will fail and we show the error - we don't need to show a dev sign-in fallback anymore (user said they don't want unverified sign-in).
+4. Update the "Check your email" screen copy to include something like "Check your inbox for the magic link and instructions." - the current copy is "We sent a sign-in link to ... Click the link in that email to sign in, or enter the 6-digit code below." I could add a sentence: "Check your inbox for the magic link and instructions." or rephrase to include it. I'll add: "Check your inbox for the magic link and instructions." as a line under the first paragraph.
+
+Let me also remove the showDevSignIn state and the logic that sets it, since we're removing the dev sign-in button. And remove devSigningIn state.
+</details></think>
+
+---
+
+
+Checking where `showDevSignIn` is used so we can remove the dev sign-in path.
+
+
+---
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search">
+<details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+
+Parameters:
+
+```json
+{
+  "pattern": "showDevSignIn|devSigningIn",
+  "path": "/Users/sethkaplan/Library/Mobile Documents/com~apple~CloudDocs/~MY APPS/Transcriber2/transcriber-app/src/app/page.tsx",
+  "caseInsensitive": false
+}
+```
+Additional data:
+
+```json
+{
+  "isPruned": true,
+  "pattern": "showDevSignIn|devSigningIn",
+  "path": "/Users/sethkaplan/Library/Mobile Documents/com~apple~CloudDocs/~MY APPS/Transcriber2/transcriber-app/src/app/page.tsx",
+  "outputMode": "content",
+  "totalFiles": 1,
+  "totalMatches": 4,
+  "topFiles": [
+    {
+      "uri": "src/app/page.tsx",
+      "matchCount": 4
+    }
+  ]
+}
+```
+Status: **completed**
+
+
+</details>
+</tool-use>
+
+---
+
+<think><details><summary>Thought Process</summary>
+
+showDevSignIn is set in handleSendLink when isNotConfigured - so when email isn't configured we set setShowDevSignIn(true). But the button is always rendered (there's no conditional on showDevSignIn for showing the second button). So we can:
+1. Remove handleDevSignIn, devSigningIn, showDevSignIn entirely
+2. Replace the second button with "Register new email address" that calls handleSendLink
+3. When both buttons do handleSendLink, we need to distinguish loading state - we have `sending` for the first button. If they click "Register new email address" we also set sending=true and use the same flow. So one loading state is enough. Good.
+4. Update check-email copy to include "Check your inbox for the magic link and instructions."
+</details></think>
+
+---
+
+
+Implementing: replace the instant sign-in button with "Register new email address" that sends the magic link and show the check-email screen with the requested copy.
+
+
+---
+
+The string to replace was not found in the file.
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="edit_file_v2">
+
+<details><summary>Tool use: **edit_file_v2** • Edit file: /Users/sethkaplan/Library/Mobile Documents/com~apple~CloudDocs/~MY APPS/Transcriber2/transcriber-app/src/app/page.tsx</summary>
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="edit_file_v2">
+
+<details><summary>Tool use: **edit_file_v2** • Edit file: /Users/sethkaplan/Library/Mobile Documents/com~apple~CloudDocs/~MY APPS/Transcriber2/transcriber-app/src/app/page.tsx</summary>
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="edit_file_v2">
+
+<details><summary>Tool use: **edit_file_v2** • Edit file: /Users/sethkaplan/Library/Mobile Documents/com~apple~CloudDocs/~MY APPS/Transcriber2/transcriber-app/src/app/page.tsx</summary>
+
+Status: **loading**
+
+</details>
+
+</tool-use>
+
+---
+

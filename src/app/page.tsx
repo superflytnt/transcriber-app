@@ -269,38 +269,6 @@ function LoginUI({
   const [codeError, setCodeError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
-  const [showDevSignIn, setShowDevSignIn] = useState(false);
-  const [devSigningIn, setDevSigningIn] = useState(false);
-
-  const handleDevSignIn = useCallback(async () => {
-    const e = email.trim();
-    if (!e) {
-      setSendError("Please enter your email.");
-      return;
-    }
-    setSendError(null);
-    setDevSigningIn(true);
-    try {
-      const res = await fetch("/api/auth/dev-sign-in", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: e }),
-        credentials: "include",
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && typeof data.email === "string") {
-        const sessionRes = await fetch("/api/auth/session", { credentials: "include" });
-        const sessionData = sessionRes.ok ? await sessionRes.json().catch(() => ({})) : {};
-        onSession(data.email, !!sessionData.isAdmin);
-      } else {
-        setSendError((data.error as string) || "Sign-in failed.");
-      }
-    } catch {
-      setSendError("Something went wrong.");
-    } finally {
-      setDevSigningIn(false);
-    }
-  }, [email, onSession]);
 
   const handleSendLink = useCallback(async () => {
     const e = email.trim();
@@ -324,7 +292,6 @@ function LoginUI({
         const msg = (data.error as string) || "Failed to send. Try again.";
         const isNotConfigured = res.status === 503 || (data.code as string) === "EMAIL_NOT_CONFIGURED" || (data.code as string) === "APP_URL_NOT_SET" || /not configured|APP_URL/i.test(msg);
         setSendError(isNotConfigured ? (msg || "This server can't send email yet.") : msg);
-        if (isNotConfigured) setShowDevSignIn(true);
       }
     } catch {
       setSendError("Something went wrong. Try again.");
@@ -392,11 +359,11 @@ function LoginUI({
           </button>
           <button
             type="button"
-            onClick={handleDevSignIn}
-            disabled={devSigningIn}
+            onClick={handleSendLink}
+            disabled={sending}
             className="mt-3 w-full rounded-lg border border-zinc-600 px-4 py-2.5 text-sm font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
           >
-            {devSigningIn ? "Signing in…" : "Sign in without sending a link"}
+            {sending ? "Sending…" : "Register new email address"}
           </button>
           <p className="mt-6 text-center text-xs text-zinc-600" aria-hidden>v{APP_VERSION}</p>
         </div>
@@ -409,7 +376,7 @@ function LoginUI({
       <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-gradient-to-b from-zinc-900/80 to-zinc-900/40 px-6 py-8 shadow-lg">
         <h1 className="text-2xl font-bold tracking-tight text-white text-center">Check your email</h1>
         <p className="mt-2 text-zinc-400 text-center text-sm">
-          We sent a sign-in link to <strong className="text-zinc-300">{pendingEmail}</strong>. Click the link in that email to sign in, or enter the 6-digit code below.
+          We sent a sign-in link to <strong className="text-zinc-300">{pendingEmail}</strong>. Check your inbox for the magic link and instructions. Click the link in that email to sign in, or enter the 6-digit code below.
         </p>
         <div className="mt-6">
           <label htmlFor="login-code" className="block text-xs font-medium text-zinc-500 mb-1">
