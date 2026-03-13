@@ -319,8 +319,8 @@ function LoginUI({
         setStep("check-email");
       } else {
         const msg = (data.error as string) || "Failed to send. Try again.";
-        const isNotConfigured = res.status === 503 || (data.code as string) === "EMAIL_NOT_CONFIGURED" || /not configured/i.test(msg);
-        setSendError(isNotConfigured ? "This server can't send email yet." : msg);
+        const isNotConfigured = res.status === 503 || (data.code as string) === "EMAIL_NOT_CONFIGURED" || (data.code as string) === "APP_URL_NOT_SET" || /not configured|APP_URL/i.test(msg);
+        setSendError(isNotConfigured ? (msg || "This server can't send email yet.") : msg);
         if (isNotConfigured) setShowDevSignIn(true);
       }
     } catch {
@@ -387,16 +387,14 @@ function LoginUI({
           >
             {sending ? "Sending…" : "Send login link"}
           </button>
-          {showDevSignIn && (
-            <button
-              type="button"
-              onClick={handleDevSignIn}
-              disabled={devSigningIn}
-              className="mt-3 w-full rounded-lg border border-zinc-600 px-4 py-2.5 text-sm font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
-            >
-              {devSigningIn ? "Signing in…" : "Sign in without email (development)"}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={handleDevSignIn}
+            disabled={devSigningIn}
+            className="mt-3 w-full rounded-lg border border-zinc-600 px-4 py-2.5 text-sm font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+          >
+            {devSigningIn ? "Signing in…" : "Sign in without email"}
+          </button>
         </div>
       </main>
     );

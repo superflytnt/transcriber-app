@@ -21,6 +21,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { status: 503 }
       );
     }
+    const isProduction = process.env.NODE_ENV === "production";
+    if (isProduction && !env.appUrl?.trim()) {
+      return NextResponse.json(
+        {
+          error: "APP_URL is not set. Set APP_URL to your app's URL (e.g. https://yourapp.up.railway.app) so login links work.",
+          code: "APP_URL_NOT_SET",
+        },
+        { status: 503 }
+      );
+    }
     const result = await createLoginToken(email);
     if ("error" in result) {
       return NextResponse.json(

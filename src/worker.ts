@@ -42,6 +42,8 @@ const start = async (): Promise<void> => {
     {
       connection: redisConnection,
       concurrency: Number(process.env.WORKER_CONCURRENCY ?? "2"),
+      lockDuration: 600000,
+      stalledInterval: 300000,
     }
   );
 

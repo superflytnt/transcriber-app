@@ -180,8 +180,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         jobId: uuidv4(),
         removeOnComplete: 20,
         removeOnFail: 20,
-        attempts: 2,
-        backoff: { type: "exponential", delay: 5000 },
+        attempts: 3,
+        backoff: { type: "exponential", delay: 60000 },
       });
       console.log("[POST /api/jobs] job queued (Redis)", { queueMs: Date.now() - queueStart, jobId: job.id });
       return NextResponse.json({ jobId: job.id, fileInfo });

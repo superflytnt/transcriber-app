@@ -14,7 +14,10 @@ export async function sendLoginEmail(params: {
     console.warn("[email] RESEND_API_KEY not set; login email not sent.");
     return { ok: false, error: "Email not configured." };
   }
-  const appUrl = env.appUrl || "http://localhost:3000";
+  const appUrl = (env.appUrl || "").trim() || "http://localhost:3000";
+  if (!env.appUrl?.trim()) {
+    console.warn("[email] APP_URL not set; login link may point to localhost.");
+  }
   const verifyUrl = `${appUrl}/auth/verify?token=${encodeURIComponent(token)}`;
   const domain = new URL(appUrl).hostname;
 
@@ -51,13 +54,23 @@ export async function sendLoginEmail(params: {
       }),
     });
     if (!res.ok) {
-      const err = await res.text();
-      console.error("[email] Resend error:", res.status, err);
-      return { ok: false, error: "Failed to send email." };
+      const errText = await res.text();
+      console.error("[email] Resend error:", res.status, errText);
+      let message = "Failed to send email.";
+      try {
+        const errJson = JSON.parse(errText) as { message?: string };
+        if (typeof errJson?.message === "string" && errJson.message.trim()) {
+          message = errJson.message;
+        }
+      } catch {
+        // use default message
+      }
+      return { ok: false, error: message };
     }
     return { ok: true };
   } catch (err) {
     console.error("[email]", err);
-    return { ok: false, error: "Failed to send email." };
+    const message = err instanceof Error ? err.message : "Failed to send email.";
+    return { ok: false, error: message };
   }
 }
