@@ -1,0 +1,27 @@
+---
+description: Keep version in package.json as the single source of truth; bump it on release-worthy changes so the displayed version stays correct.
+alwaysApply: true
+---
+
+# Version control and displayed version
+
+## Single source of truth
+
+- The version shown in the app (login page and main page footer) comes from **package.json** only. It is imported in `src/app/page.tsx` as `APP_VERSION` and rendered wherever we show a version (e.g. "v0.1.0").
+- **Do not** add or maintain a separate version constant, env var, or hardcoded string for the UI. Any new place that shows a version must use the same source (e.g. import from package.json or a small lib that re-exports it). That way the number on screen is always in sync.
+
+## When to bump the version
+
+- **Bump the version in package.json** whenever you:
+  - Ship a new release or deploy (e.g. before or as part of pushing to main for Railway).
+  - Complete a meaningful change set (feature, fix, or config the user will care to distinguish).
+- Use **semantic versioning**:
+  - **Patch** (e.g. 0.1.0 → 0.1.1): bug fixes, small tweaks, no new behavior.
+  - **Minor** (e.g. 0.1.0 → 0.2.0): new features or notable improvements, backward compatible.
+  - **Major** (e.g. 0.1.0 → 1.0.0): breaking changes or major redesign.
+- After bumping, the displayed version updates automatically on the next build; no extra edits in the UI are needed.
+
+## Checklist
+
+- When making a release or meaningful change: update `version` in **transcriber-app/package.json**.
+- When adding a new place that shows the app version: use the existing source (e.g. `APP_VERSION` from the package.json import in `page.tsx`, or a shared `appVersion` from a single module that reads package.json). Do not introduce a second source of truth.

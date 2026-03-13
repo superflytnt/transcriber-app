@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatDurationMs } from "@/lib/format-duration";
+import packageJson from "../../package.json";
+
+const APP_VERSION = packageJson.version;
 
 
 type Session = { email: string; isAdmin?: boolean } | null;
@@ -395,6 +398,7 @@ function LoginUI({
           >
             {devSigningIn ? "Signing in…" : "Sign in without email"}
           </button>
+          <p className="mt-6 text-center text-xs text-zinc-600" aria-hidden>v{APP_VERSION}</p>
         </div>
       </main>
     );
@@ -440,6 +444,7 @@ function LoginUI({
         >
           Use a different email
         </button>
+        <p className="mt-6 text-center text-xs text-zinc-600" aria-hidden>v{APP_VERSION}</p>
       </div>
     </main>
   );
@@ -1539,6 +1544,7 @@ export default function Home() {
           >
             Sign out
           </button>
+          <span className="text-xs text-zinc-600" aria-hidden>v{APP_VERSION}</span>
         </footer>
       </div>
 
