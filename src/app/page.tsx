@@ -396,7 +396,7 @@ function LoginUI({
             disabled={devSigningIn}
             className="mt-3 w-full rounded-lg border border-zinc-600 px-4 py-2.5 text-sm font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
           >
-            {devSigningIn ? "Signing in…" : "Sign in without email"}
+            {devSigningIn ? "Signing in…" : "Sign in without sending a link"}
           </button>
           <p className="mt-6 text-center text-xs text-zinc-600" aria-hidden>v{APP_VERSION}</p>
         </div>
